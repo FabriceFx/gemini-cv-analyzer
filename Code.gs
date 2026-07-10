@@ -17,7 +17,7 @@ function onOpen() {
     .addSeparator()
     .addItem('🧹 Vider les résultats', 'clearResults')
     .addSeparator()
-    .addItem('📖 Guide & Bonnes Pratiques', 'showGuide')
+    .addItem('📖 Guide & bonnes pratiques', 'showGuide')
     .addToUi();
 }
 
@@ -77,10 +77,10 @@ function setupSheets() {
   const configData = [
     ["Clé API Gemini", apiKeyStatus, "La clé est stockée de façon sécurisée (hors de cette feuille). Utilisez le menu '🔑 Configurer la clé API' pour la modifier."],
     ["URL du dossier Drive contenant les CVs", existingConfig.drive !== undefined ? existingConfig.drive : "", "Lien du dossier Google Drive contenant les CVs PDF (ex: https://drive.google.com/drive/folders/...)"],
-    ["URL ou Texte de l'Annonce", existingConfig.job !== undefined ? existingConfig.job : "", "Entrez l'URL de l'offre d'emploi ou collez directement la description textuelle"],
+    ["URL ou texte de l'annonce", existingConfig.job !== undefined ? existingConfig.job : "", "Entrez l'URL de l'offre d'emploi ou collez directement la description textuelle"],
     ["Modèle Gemini", existingConfig.model || "gemini-3.5-flash", "Sélectionnez le modèle d'IA (gemini-3.5-flash est recommandé)"],
     ["Critères spécifiques du recruteur", existingConfig.criteria !== undefined ? existingConfig.criteria : "", "Ex: 'Priorité aux compétences React, être bilingue anglais, note stricte' (optionnel)"],
-    ["Prompt Système", 
+    ["Prompt système", 
      existingConfig.prompt || "Agis en tant que Recruteur Senior. Je te fournis l'offre d'emploi suivante :\n{{JOB_DESCRIPTION}}\n\net le CV d'un candidat en PDF. Tu ne dois rien inventer et tu ne dois faire aucune interprétation : réfère-toi uniquement aux données explicites du CV et de l'offre d'emploi.\n\nConsignes spécifiques du recruteur :\n{{CRITERIA}}\n\nConsignes de mise en forme et de logique :\nFormat du texte : N'utilise jamais de puces (points ou tirets) pour séparer les idées dans les champs texte. Privilégie des parenthèses ou du texte fluide. Pour les compétences, indique le statut général (Oui / Non / Partiel) suivi des éléments précis entre parenthèses, par exemple : 'Oui (compétence X, compétence Y)' ou 'Partiel (compétence Z)'.\n\nIntitule ton rapport : 'Analyse des CV par l'IA'.", 
      "Le prompt système utilisé pour l'analyse. Laissez {{JOB_DESCRIPTION}} et {{CRITERIA}} intacts pour qu'ils soient remplacés automatiquement."],
     ["Délai de rétention RGPD (jours)", existingConfig.retention !== undefined ? existingConfig.retention : 730, "Les CV plus anciens seront supprimés lors du nettoyage (Ex: 730 pour 2 ans, 0 pour désactiver)"]
@@ -154,7 +154,7 @@ function setupSheets() {
   // Protection de la feuille (UI/UX Safety)
   // L'utilisateur ne peut modifier que la colonne B
   try {
-    const protection = configSheet.protect().setDescription("Protection Interface Config");
+    const protection = configSheet.protect().setDescription("Protection interface config");
     protection.setWarningOnly(false);
     protection.setUnprotectedRanges([inputCells]);
   } catch(e) {}
@@ -204,15 +204,15 @@ function setupSheets() {
     "Email",
     "Téléphone",
     "Expérience pertinente", 
-    "Formation & Diplômes", 
+    "Formation & diplômes", 
     "Top 3 compétences", 
     "Points forts", 
-    "Points de vigilance / Questions", 
+    "Points de vigilance / questions", 
     "Recommandation", 
     "Note / 5", 
     "Fichier CV", 
     "Date d'analyse", 
-    "ID Fichier"
+    "ID fichier"
   ];
   
   const headerRange = resultsSheet.getRange(3, 1, 1, headers.length);
@@ -230,7 +230,7 @@ function setupSheets() {
   
   // Protection des en-têtes (Lignes 1 à 3)
   try {
-    const headerProtection = resultsSheet.getRange("A1:M3").protect().setDescription("Protection En-têtes Résultats");
+    const headerProtection = resultsSheet.getRange("A1:M3").protect().setDescription("Protection en-têtes résultats");
     headerProtection.setWarningOnly(true);
   } catch(e) {}
   
@@ -384,10 +384,10 @@ function analyzeCVs() {
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY')
                  || (config['Clé API Gemini'] || '').toString().trim();
   const folderUrl = (config['URL du dossier Drive contenant les CVs'] || '').toString().trim();
-  const annonceInput = (config["URL ou Texte de l'Annonce"] || '').toString().trim();
+  const annonceInput = (config["URL ou texte de l'annonce"] || '').toString().trim();
   const model = (config['Modèle Gemini'] || 'gemini-3.5-flash').toString().trim();
   const criteria = (config['Critères spécifiques du recruteur'] || '').toString().trim();
-  const rawSystemPrompt = (config['Prompt Système'] || '').toString().trim();
+  const rawSystemPrompt = (config['Prompt système'] || '').toString().trim();
   
   // Guard: prompt must contain both placeholders to be usable
   const DEFAULT_PROMPT = "Agis en tant que Recruteur Senior. Je te fournis l'offre d'emploi suivante :\n{{JOB_DESCRIPTION}}\n\net le CV d'un candidat en PDF. Tu ne dois rien inventer et tu ne dois faire aucune interprétation : réfère-toi uniquement aux données explicites du CV et de l'offre d'emploi.\n\nConsignes spécifiques du recruteur :\n{{CRITERIA}}\n\nConsignes de mise en forme et de logique :\nFormat du texte : N'utilise jamais de puces (points ou tirets) pour séparer les idées dans les champs texte. Privilégie des parenthèses ou du texte fluide. Pour les compétences, indique le statut général (Oui / Non / Partiel) suivi des éléments précis entre parenthèses. Intitule ton rapport : 'Analyse des CV par l'IA'.";
@@ -547,7 +547,7 @@ function analyzeCVs() {
       
       // Add error row
       const errorRow = [
-        "ERREUR ANALYSE",
+        "Erreur analyse",
         "",
         "",
         "",
@@ -1461,7 +1461,7 @@ function draftEmailsForCandidates() {
   
   const ui = SpreadsheetApp.getUi();
   const response = ui.alert("Génération d'emails via l'IA", 
-    "Voulez-vous générer un brouillon d'email ultra-personnalisé (rédigé par l'IA) pour chaque candidat du tableau ? (Le processus prend quelques secondes par email). Les emails seront créés dans vos Brouillons Gmail.", 
+    "Voulez-vous générer un brouillon d'email ultra-personnalisé (rédigé par l'IA) pour chaque candidat du tableau ? (Le processus prend quelques secondes par email). Les emails seront créés dans vos brouillons Gmail.", 
     ui.ButtonSet.YES_NO);
     
   if (response !== ui.Button.YES) return;
