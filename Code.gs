@@ -392,10 +392,10 @@ function analyzeCVs() {
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY')
                  || (config['Clé API Gemini'] || '').toString().trim();
   const folderUrl = (config['URL du dossier Drive contenant les CVs'] || '').toString().trim();
-  const annonceInput = (config["URL ou texte de l'annonce"] || '').toString().trim();
+  const annonceInput = (config["URL ou texte de l'annonce"] || config["URL ou Texte de l'Annonce"] || '').toString().trim();
   const model = (config['Modèle Gemini'] || 'gemini-3.5-flash').toString().trim();
   const criteria = (config['Critères spécifiques du recruteur'] || '').toString().trim();
-  const rawSystemPrompt = (config['Prompt système'] || '').toString().trim();
+  const rawSystemPrompt = (config['Prompt système'] || config['Prompt Système'] || '').toString().trim();
   
   // Sécurité : le prompt doit contenir les deux balises (placeholders) pour être utilisable
   const DEFAULT_PROMPT = "Agis en tant que Recruteur Senior. Je te fournis l'offre d'emploi suivante :\n{{JOB_DESCRIPTION}}\n\net le CV d'un candidat en PDF. Tu ne dois rien inventer et tu ne dois faire aucune interprétation : réfère-toi uniquement aux données explicites du CV et de l'offre d'emploi.\n\nConsignes spécifiques du recruteur :\n{{CRITERIA}}\n\nConsignes de mise en forme et de logique :\nFormat du texte : N'utilise jamais de puces (points ou tirets) pour séparer les idées dans les champs texte. Privilégie des parenthèses ou du texte fluide. Pour les compétences, indique le statut général (Oui / Non / Partiel) suivi des éléments précis entre parenthèses. Intitule ton rapport : 'Analyse des CV par l'IA'.";
