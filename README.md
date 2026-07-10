@@ -1,6 +1,8 @@
-# 🔍 Analyseur de CV IA - Google Sheets & Apps Script / AI resume analyzer - Google Sheets & Apps Script
+# 🔍 gemini-cv-analyzer
 
-Cet outil utilise l'API Gemini pour analyser automatiquement des CVs au format PDF déposés dans un dossier Google Drive, en les comparant à une offre d'emploi. Il évalue l'adéquation des profils, attribue une note sur 100 et extrait une décision ainsi que les forces et faiblesses clés. / This tool uses the Gemini API to automatically analyze PDF resumes placed in a Google Drive folder, comparing them to a job description. It evaluates candidate fit, assigns a score out of 100, and extracts a decision along with key strengths and weaknesses.
+**Un assistant de recrutement intelligent sur Google Sheets utilisant l'API Gemini / An AI-powered recruitment assistant built on Google Sheets.**
+
+Cet outil utilise l'API Gemini pour analyser automatiquement des CVs au format PDF déposés dans un dossier Google Drive, en les comparant à une offre d'emploi. Il évalue l'adéquation des profils, extrait les coordonnées, et rédige automatiquement les brouillons d'emails de réponse. / This tool uses the Gemini API to automatically analyze PDF resumes placed in a Google Drive folder, comparing them to a job description. It evaluates candidate fit, extracts contact information, and automatically drafts response emails.
 
 ---
 
