@@ -147,4 +147,4 @@ Le projet `gemini-cv-analyzer` repose entièrement sur cette mécanique. Une foi
 
 Et voilà comment on passe d'une pile de PDF indéchiffrables à un tableau de bord de recrutement propre et structuré en quelques lignes de code !
 
-> *Vous souhaitez voir le code complet et l'installer sur votre espace Workspace ? Rendez-vous sur mon dépôt GitHub ou sur [faucheux.bzh](https://faucheux.bzh) !*
+> *Vous souhaitez voir le code complet et l'installer sur votre espace Workspace ? Retrouvez le sur mon [dépôt GitHub](https://github.com/FabriceFx/gemini-cv-analyzer) ; vous voulez de l'aide pour vos cas d'usage, contactez moi depuis mon site [faucheux.bzh](https://faucheux.bzh) !*
