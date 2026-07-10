@@ -1,7 +1,12 @@
 /**
- * AI CV Analyzer & Scorer
- * Developed in Apps Script for Google Sheets
- * Natively supports PDF parsing with Gemini API
+ * Analyseur de CV & Système de Notation par IA
+ * Développé en Apps Script pour Google Sheets
+ * Intègre l'API Gemini pour l'analyse native des fichiers PDF
+ */
+
+/**
+ * Fonction exécutée à l'ouverture du fichier.
+ * Crée le menu personnalisé dans l'interface Google Sheets.
  */
 
 function onOpen() {
@@ -22,18 +27,19 @@ function onOpen() {
 }
 
 /**
- * Creates and formats the configuration and results sheets.
+ * Initialise et met en forme les onglets "Configuration" et "Résultats de l'Analyse".
+ * Conserve les données saisies par l'utilisateur lors d'une réinitialisation.
  */
 function setupSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
-  // === 1. Configuration Sheet ===
+  // === 1. Feuille de configuration ===
   let configSheet = ss.getSheetByName("Configuration");
   let existingConfig = {};
   if (!configSheet) {
     configSheet = ss.insertSheet("Configuration");
   } else {
-    // Preserve user inputs in column B before clearing
+    // Conserver les saisies de l'utilisateur dans la colonne B avant d'effacer la feuille
     try {
       existingConfig.drive = configSheet.getRange("B4").getValue();
       existingConfig.job = configSheet.getRange("B5").getValue();
@@ -51,14 +57,14 @@ function setupSheets() {
   // Masquer le quadrillage pour un look "Application"
   configSheet.setHiddenGridlines(true);
   
-  // Design color scheme (Tailwind inspired)
+  // Couleurs de l'interface (Inspiré de Tailwind CSS)
   const primaryColor = "#1e40af"; // Blue 800
   const bgLight = "#f8fafc";      // Slate 50
   const borderGrey = "#e2e8f0";   // Slate 200
   const textDark = "#0f172a";     // Slate 900
   const textMuted = "#64748b";    // Slate 500
   
-  // Header banner
+  // Bannière d'en-tête
   configSheet.getRange("A1:C1").merge().setValue("⚙️ Configuration - Analyseur de CV AI")
     .setFontFamily("Inter")
     .setFontSize(14)
@@ -70,7 +76,7 @@ function setupSheets() {
   
   configSheet.setRowHeight(1, 50);
   
-  // Configuration metadata
+  // Métadonnées de la configuration
   const storedKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
   const apiKeyStatus = storedKey ? '✅ Clé configurée en sécurité (menu → Configurer la clé API)' : '⚠️ Non configurée — utilisez le menu → Configurer la clé API';
 
@@ -86,7 +92,7 @@ function setupSheets() {
     ["Délai de rétention RGPD (jours)", existingConfig.retention !== undefined ? existingConfig.retention : 730, "Les CV plus anciens seront supprimés lors du nettoyage (Ex: 730 pour 2 ans, 0 pour désactiver)"]
   ];
   
-  // Appliquer le fond léger globalement pour l'interface
+  // Appliquer le fond clair sur l'ensemble de l'interface
   configSheet.getRange("A2:C100").setBackgroundColor(bgLight);
   
   for (let i = 0; i < configData.length; i++) {
@@ -118,15 +124,15 @@ function setupSheets() {
     configSheet.setRowHeight(row, 35);
   }
   
-  // Set larger row heights for prompt and criteria text boxes
-  configSheet.setRowHeight(7, 70);  // Criteria input
-  configSheet.setRowHeight(8, 140); // Prompt system input
+  // Agrandir la hauteur des lignes pour les champs longs (Critères et Prompt)
+  configSheet.setRowHeight(7, 70);  // Saisie des critères
+  configSheet.setRowHeight(8, 140); // Saisie du prompt système
   
-  // Format the inputs (Column B)
+  // Mise en forme des champs de saisie (Colonne B)
   const inputCells = configSheet.getRange("B3:B9");
   inputCells.setWrap(true).setFontSize(11);
   
-  // Data validation for models
+  // Validation des données pour la sélection du modèle IA
   const modelCell = configSheet.getRange("B6");
   const rule = SpreadsheetApp.newDataValidation()
     .requireValueInList(["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash", "gemini-1.5-pro"], true)
@@ -163,7 +169,7 @@ function setupSheets() {
   configSheet.setColumnWidth(2, 500);
   configSheet.setColumnWidth(3, 350);
   
-  // === 2. Results Sheet ===
+  // === 2. Feuille des résultats ===
   let resultsSheet = ss.getSheetByName("Résultats de l'Analyse");
   if (!resultsSheet) {
     resultsSheet = ss.insertSheet("Résultats de l'Analyse");
@@ -175,7 +181,7 @@ function setupSheets() {
   
   resultsSheet.setHiddenGridlines(true);
   
-  // Row 1: Title Banner
+  // Ligne 1 : Bannière de titre
   resultsSheet.getRange("A1:M1").merge().setValue("Analyse des CV par l'IA")
     .setFontFamily("Inter")
     .setFontSize(14)
@@ -186,7 +192,7 @@ function setupSheets() {
     .setVerticalAlignment("middle");
   resultsSheet.setRowHeight(1, 50);
   
-  // Row 2: Session Synthesis Box
+  // Ligne 2 : Boîte de synthèse globale
   resultsSheet.getRange("A2:M2").merge().setValue("Synthèse globale : En attente du lancement de l'analyse pour générer les conseils de session...")
     .setFontFamily("Inter")
     .setFontSize(11)
@@ -198,7 +204,7 @@ function setupSheets() {
     .setBorder(false, false, true, false, false, false, borderGrey, SpreadsheetApp.BorderStyle.SOLID);
   resultsSheet.setRowHeight(2, 55);
   
-  // Row 3: Table headers
+  // Ligne 3 : En-têtes du tableau
   const headers = [
     "Candidat", 
     "Email",
@@ -234,7 +240,7 @@ function setupSheets() {
     headerProtection.setWarningOnly(true);
   } catch(e) {}
   
-  // Results formatting & widths
+  // Mise en forme et largeur des colonnes de résultats
   resultsSheet.setColumnWidth(1, 150); // Nom du Candidat
   resultsSheet.setColumnWidth(2, 180); // Email
   resultsSheet.setColumnWidth(3, 120); // Téléphone
@@ -254,13 +260,13 @@ function setupSheets() {
   // Row banding (lignes alternées)
   resultsSheet.getRange("A3:M1000").applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false);
   
-  // Set default column format properties starting at row 4
+  // Définir les propriétés de formatage par défaut à partir de la ligne 4
   resultsSheet.getRange("A4:A").setVerticalAlignment("top").setWrap(true).setFontFamily("Inter").setFontWeight("bold").setFontColor(primaryColor);
   resultsSheet.getRange("B4:H").setVerticalAlignment("top").setWrap(true).setFontFamily("Inter").setFontSize(10).setFontColor(textDark);
   resultsSheet.getRange("I4:J").setHorizontalAlignment("center").setVerticalAlignment("middle").setFontWeight("bold").setFontFamily("Inter");
   resultsSheet.getRange("K4:L").setHorizontalAlignment("center").setVerticalAlignment("middle").setFontFamily("Inter").setFontColor(textMuted);
   
-  // Setup conditional formatting for "Recommandation" (Column I)
+  // Configurer le formatage conditionnel pour la "Recommandation" (Colonne I)
   const recommendationRange = resultsSheet.getRange("I4:I");
   const ruleGreen = SpreadsheetApp.newConditionalFormatRule()
     .whenTextEqualTo("À contacter")
@@ -283,7 +289,7 @@ function setupSheets() {
     .setRanges([recommendationRange])
     .build();
     
-  // Setup conditional formatting for "Note / 5" (Column J)
+  // Configurer le formatage conditionnel pour la "Note / 5" (Colonne J)
   const noteRange = resultsSheet.getRange("J4:J");
   const ruleNoteGreen = SpreadsheetApp.newConditionalFormatRule()
     .whenNumberGreaterThanOrEqualTo(4)
@@ -322,7 +328,9 @@ function setupSheets() {
   ss.toast("Feuilles configurées avec succès.", "✅ Initialisation réussie");
 }
 
-/** Updates the API key status cell in the Configuration sheet */
+/**
+ * Met à jour visuellement la cellule d'état de la clé API dans la feuille Configuration.
+ */
 function updateApiKeyStatusUI() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const configSheet = ss.getSheetByName("Configuration");
@@ -335,7 +343,7 @@ function updateApiKeyStatusUI() {
 }
 
 /**
- * Clears the analysis results tab with user verification.
+ * Vide le tableau des résultats d'analyse (après confirmation de l'utilisateur).
  */
 function clearResults() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -363,7 +371,7 @@ function clearResults() {
 }
 
 /**
- * Main function: Lists PDFs in folder, parses them and scores against Job description using Gemini API.
+ * Fonction principale : Liste les PDF du dossier, les analyse et les note par rapport à l'offre d'emploi via l'API Gemini.
  */
 function analyzeCVs() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -379,7 +387,7 @@ function analyzeCVs() {
   const startTime = Date.now();
   const MAX_EXECUTION_TIME = 5 * 60 * 1000;
   
-  // Retrieve config values by label (robust against row insertions)
+  // Récupérer les valeurs de configuration
   const config = getConfig(configSheet);
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY')
                  || (config['Clé API Gemini'] || '').toString().trim();
@@ -389,13 +397,13 @@ function analyzeCVs() {
   const criteria = (config['Critères spécifiques du recruteur'] || '').toString().trim();
   const rawSystemPrompt = (config['Prompt système'] || '').toString().trim();
   
-  // Guard: prompt must contain both placeholders to be usable
+  // Sécurité : le prompt doit contenir les deux balises (placeholders) pour être utilisable
   const DEFAULT_PROMPT = "Agis en tant que Recruteur Senior. Je te fournis l'offre d'emploi suivante :\n{{JOB_DESCRIPTION}}\n\net le CV d'un candidat en PDF. Tu ne dois rien inventer et tu ne dois faire aucune interprétation : réfère-toi uniquement aux données explicites du CV et de l'offre d'emploi.\n\nConsignes spécifiques du recruteur :\n{{CRITERIA}}\n\nConsignes de mise en forme et de logique :\nFormat du texte : N'utilise jamais de puces (points ou tirets) pour séparer les idées dans les champs texte. Privilégie des parenthèses ou du texte fluide. Pour les compétences, indique le statut général (Oui / Non / Partiel) suivi des éléments précis entre parenthèses. Intitule ton rapport : 'Analyse des CV par l'IA'.";
   const systemPrompt = (rawSystemPrompt.includes('{{JOB_DESCRIPTION}}') && rawSystemPrompt.includes('{{CRITERIA}}'))
     ? rawSystemPrompt
     : DEFAULT_PROMPT;
   
-  // Basic validation
+  // Validations de base
   if (!apiKey) {
     SpreadsheetApp.getUi().alert("Configuration requise : veuillez saisir votre clé API Gemini via le menu '\uD83D\uDD11 Configurer la clé API'.");
     return;
@@ -409,7 +417,7 @@ function analyzeCVs() {
     return;
   }
   
-  // Extract folder ID
+  // Extraction de l'ID du dossier
   const folderId = getFolderIdFromUrl(folderUrl);
   if (!folderId) {
     SpreadsheetApp.getUi().alert("Erreur de configuration : l'URL du dossier Drive semble invalide. Vérifiez qu'elle commence par https://drive.google.com/drive/folders/...");
@@ -424,7 +432,7 @@ function analyzeCVs() {
     return;
   }
   
-  // Retrieve or extract job description
+  // Récupérer ou extraire la description de l'offre d'emploi
   let jobDescription = "";
   if (annonceInput.startsWith("http://") || annonceInput.startsWith("https://")) {
     ss.toast("Chargement de l'annonce depuis l'URL...", "Annonce 🌐", 10);
@@ -446,11 +454,11 @@ function analyzeCVs() {
     jobDescription = annonceInput;
   }
   
-  // Identify already processed files (Row 4 onwards, ID is in Column 11)
+  // Identifier les fichiers déjà traités (À partir de la ligne 4, l'ID est dans la colonne 13)
   const processedIds = {};
   const lastRow = resultsSheet.getLastRow();
   if (lastRow > 3) {
-    const existingIds = resultsSheet.getRange(4, 11, lastRow - 3, 1).getValues();
+    const existingIds = resultsSheet.getRange(4, 13, lastRow - 3, 1).getValues();
     for (let i = 0; i < existingIds.length; i++) {
       const id = existingIds[i][0].toString().trim();
       if (id) {
@@ -459,7 +467,7 @@ function analyzeCVs() {
     }
   }
   
-  // Retrieve PDFs from the target folder
+  // Récupérer les fichiers PDF du dossier cible
   const files = folder.getFiles();
   const filesToProcess = [];
   while (files.hasNext()) {
@@ -502,7 +510,7 @@ function analyzeCVs() {
     try {
       const analysis = analyzeSinglePDF(file, apiKey, model, jobDescription, criteria, systemPrompt);
       
-      // Append formatted row (13 columns)
+      // Ajouter la ligne formatée (13 colonnes)
       const newRow = [
         analysis.candidateName || "Inconnu",
         analysis.email || "Non renseigné",
@@ -521,7 +529,7 @@ function analyzeCVs() {
       
       resultsSheet.appendRow(newRow);
       
-      // Apply design alignments and RichText Link
+      // Appliquer les alignements et créer le lien cliquable (RichText)
       const addedIndex = resultsSheet.getLastRow();
       
       const richTextLink = SpreadsheetApp.newRichTextValue()
@@ -538,14 +546,14 @@ function analyzeCVs() {
       SpreadsheetApp.flush();
       successCount++;
       
-      // Wait 1.5 seconds between requests
+      // Attendre 1,5 seconde entre les requêtes (pour éviter les limites de l'API)
       Utilities.sleep(1500);
       
     } catch(err) {
       Logger.log(`Erreur CV (${fileName}) : ${err.message}`);
       errorCount++;
       
-      // Add error row
+      // Ajouter une ligne d'erreur
       const errorRow = [
         "Erreur analyse",
         "",
@@ -576,19 +584,19 @@ function analyzeCVs() {
     }
   }
   
-  // Sort rows (Row 4 onwards) by Note (Column 8) descending
+  // Trier les lignes (à partir de la ligne 4) par Note décroissante (Colonne 10)
   const finalLastRow = resultsSheet.getLastRow();
   if (finalLastRow > 3) {
-    resultsSheet.getRange(4, 1, finalLastRow - 3, 11).sort({column: 8, ascending: false});
+    resultsSheet.getRange(4, 1, finalLastRow - 3, 13).sort({column: 10, ascending: false});
   }
   
-  // Generate session overall synthesis advice
+  // Générer le conseil de synthèse globale de la session
   const currentLastRow = resultsSheet.getLastRow();
   if (currentLastRow > 3) {
-    const candidatesData = resultsSheet.getRange(4, 1, currentLastRow - 3, 8).getValues();
+    const candidatesData = resultsSheet.getRange(4, 1, currentLastRow - 3, 10).getValues();
     const summaryList = [];
     for (let idx = 0; idx < candidatesData.length; idx++) {
-      summaryList.push(`- ${candidatesData[idx][0]} : Note ${candidatesData[idx][7]}/5, Recommandation: ${candidatesData[idx][6]}`);
+      summaryList.push(`- ${candidatesData[idx][0]} : Note ${candidatesData[idx][9]}/5, Recommandation: ${candidatesData[idx][8]}`);
     }
     
     try {
@@ -613,8 +621,8 @@ function analyzeCVs() {
 }
 
 /**
- * Reads all configuration values from the config sheet by label (column A)
- * and returns a plain object {label: value}. Robust against row insertions.
+ * Lit toutes les valeurs de configuration depuis la feuille (colonne A pour les libellés)
+ * et retourne un objet simple {libellé: valeur}. Résiste aux insertions de lignes.
  */
 function getConfig(configSheet) {
   const data = configSheet.getRange('A:B').getValues();
@@ -626,7 +634,7 @@ function getConfig(configSheet) {
 }
 
 /**
- * Extracts the 25+ character ID of Google Drive folders from links.
+ * Extrait l'identifiant (25+ caractères) du dossier Google Drive à partir d'un lien complet.
  */
 function getFolderIdFromUrl(url) {
   if (!url) return null;
@@ -641,7 +649,7 @@ function getFolderIdFromUrl(url) {
 }
 
 /**
- * Scrapes HTML text content from a web URL and returns plain text.
+ * Récupère le contenu HTML d'une page web (URL) et retourne le texte brut (scraping).
  */
 function fetchJobDescription(url) {
   const response = UrlFetchApp.fetch(url, {
@@ -661,7 +669,7 @@ function fetchJobDescription(url) {
   
   const html = response.getContentText();
   
-  // Basic cleaning
+  // Nettoyage basique du HTML
   const text = html
     .replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '')
     .replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, '')
@@ -669,7 +677,7 @@ function fetchJobDescription(url) {
     .replace(/\s+/g, ' ')
     .trim();
   
-  // Guard: if the resulting text is suspiciously short, the page is likely a bot wall
+  // Sécurité : si le texte résultant est trop court, la page bloque probablement les robots
   if (text.length < 200) {
     throw new Error(`La page de l'annonce semble vide ou protégée contre le scraping (${text.length} caractères récupérés). Veuillez copier-coller directement le texte de l'annonce dans la cellule B5.`);
   }
@@ -678,7 +686,7 @@ function fetchJobDescription(url) {
 }
 
 /**
- * Clean job offer page scraping content via Gemini.
+ * Nettoie et structure le texte brut récupéré d'une annonce web à l'aide de l'IA Gemini.
  */
 function extractJobDescriptionWithGemini(rawText, apiKey, model) {
   const truncatedText = rawText.substring(0, 45000);
@@ -709,10 +717,11 @@ function extractJobDescriptionWithGemini(rawText, apiKey, model) {
 }
 
 /**
- * Analyzes a single PDF resume using Gemini's multimodal inlineData input capability.
+ * Analyse un CV au format PDF en utilisant la capacité multimodale (inlineData) de Gemini.
+ * Injecte le fichier PDF directement dans le prompt de l'IA.
  */
 function analyzeSinglePDF(file, apiKey, model, jobDescription, criteria, systemPrompt) {
-  // Guard: check file size before reading (Gemini inline limit is ~20 MB)
+  // Sécurité : vérifier la taille du fichier avant lecture (la limite de l'API est d'environ 20 Mo)
   const fileSizeBytes = file.getSize();
   const MAX_PDF_SIZE = 20 * 1024 * 1024; // 20 MB
   if (fileSizeBytes > MAX_PDF_SIZE) {
@@ -730,12 +739,12 @@ function analyzeSinglePDF(file, apiKey, model, jobDescription, criteria, systemP
     throw new Error(`Impossible de lire le fichier PDF "${file.getName()}". Il est peut-être corrompu ou protégé par un mot de passe. Détail : ${e.message}`);
   }
   
-  // Format the prompt with inputs
+  // Remplacer les balises dans le prompt par les valeurs saisies
   const finalPrompt = systemPrompt
     .replace("{{JOB_DESCRIPTION}}", jobDescription)
     .replace("{{CRITERIA}}", criteria || "Aucun critère particulier spécifié.");
     
-  // Design target schema to guarantee JSON response fields matching the columns
+  // Définir le schéma (JSON Schema) pour garantir que l'IA respecte les colonnes de notre tableau
   const responseSchema = {
     type: "OBJECT",
     properties: {
@@ -825,7 +834,7 @@ function analyzeSinglePDF(file, apiKey, model, jobDescription, criteria, systemP
 }
 
 /**
- * Generates an overall synthesis advice phrase for the recruitment session.
+ * Génère une phrase de synthèse globale et un conseil pour la session de recrutement.
  */
 function generateSessionSynthesis(candidatesSummary, jobDescription, apiKey, model) {
   const systemInstruction = "Vous êtes un Recruteur Senior conseil. Votre rôle est de donner un conseil final en une seule phrase après l'analyse de plusieurs CVs.";
@@ -853,7 +862,7 @@ function generateSessionSynthesis(candidatesSummary, jobDescription, apiKey, mod
 }
 
 /**
- * Query caller wrapper with retry/backoff logic for API Rate Limits (HTTP 429).
+ * Fonction d'appel à l'API Gemini avec gestion des tentatives et du délai d'attente (limites de requêtes HTTP 429).
  */
 function callGeminiAPI(model, payload, apiKey) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -884,7 +893,7 @@ function callGeminiAPI(model, payload, apiKey) {
       continue;
     }
     
-    // Parse detailed error from API response
+    // Extraire le message d'erreur détaillé de la réponse de l'API
     let errorMsg = `Erreur HTTP ${code}`;
     try {
       const errJson = JSON.parse(text);
@@ -893,7 +902,7 @@ function callGeminiAPI(model, payload, apiKey) {
       }
     } catch(e) {}
     
-    // Provide actionable guidance for common codes
+    // Fournir des conseils clairs pour les codes d'erreur courants
     if (code === 400) {
       throw new Error(`Requête invalide (HTTP 400). Le PDF est peut-être trop complexe ou l'annonce contient des caractères non supportés. Détail : ${errorMsg}`);
     }
@@ -914,7 +923,7 @@ function callGeminiAPI(model, payload, apiKey) {
 }
 
 /**
- * Safely parses AI JSON output, extracting only the JSON payload robustly.
+ * Analyse et extrait le format JSON de la réponse de l'IA de manière sécurisée et robuste.
  */
 function parseJsonSafely(text) {
   let cleaned = text.trim();
@@ -944,8 +953,8 @@ function parseJsonSafely(text) {
 }
 
 /**
- * Deletes CVs in the Drive folder older than the GDPR retention policy.
- * Moves them to the trash for safety.
+ * Supprime les CV du dossier Drive dont la date dépasse le délai de conservation RGPD.
+ * Les place dans la corbeille par sécurité (récupérables pendant 30 jours).
  */
 function purgeOldCVs() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -956,7 +965,7 @@ function purgeOldCVs() {
     return;
   }
   
-  // Use getConfig() for consistency (robust against row insertions)
+  // Utilise getConfig() pour récupérer la configuration de manière sécurisée
   const config = getConfig(configSheet);
   const folderUrl = (config['URL du dossier Drive contenant les CVs'] || '').toString().trim();
   
@@ -965,7 +974,7 @@ function purgeOldCVs() {
     return;
   }
   
-  // Try to find the GDPR retention setting in column A to support both new and old config layouts
+  // Tente de trouver le paramètre de rétention RGPD (supporte les anciennes et nouvelles configurations)
   const data = configSheet.getRange("A:B").getValues();
   let retentionDays = 730; // Default to 2 years if not found
   let foundConfig = false;
@@ -1026,7 +1035,7 @@ function purgeOldCVs() {
   let deletedCount = 0;
   let errorCount = 0;
   
-  // We use setTrashed(true) to send it to the bin instead of permanent hard delete for safety
+  // On utilise setTrashed(true) pour envoyer à la corbeille au lieu d'une suppression définitive par sécurité
   while (files.hasNext()) {
     const file = files.next();
     if (file.getDateCreated() < cutoffDate) {
@@ -1052,7 +1061,7 @@ function purgeOldCVs() {
 }
 
 /**
- * Displays an HTML modal with the methodology and best practices for the tool.
+ * Affiche une fenêtre modale HTML contenant la méthodologie et les bonnes pratiques d'utilisation de l'outil.
  */
 function showGuide() {
   const htmlContent = `
@@ -1183,8 +1192,8 @@ function showGuide() {
 }
 
 /**
- * Shows an HTML dialog to securely store the Gemini API key
- * in Google Apps Script PropertiesService (not in the spreadsheet).
+ * Affiche une fenêtre de dialogue HTML pour enregistrer la clé API Gemini de manière sécurisée
+ * dans les propriétés du script Google (PropertiesService) et non dans la feuille.
  */
 function showSetApiKeyDialog() {
   const currentKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY') || '';
@@ -1416,10 +1425,10 @@ function showSetApiKeyDialog() {
   SpreadsheetApp.getUi().showModalDialog(htmlOutput, '\uD83D\uDD11 Configuration API');
 }
 
-/** Stores the Gemini API key securely in PropertiesService. Returns {ok, message}. */
+/** Enregistre la clé API Gemini de manière sécurisée dans PropertiesService. Retourne {ok, message}. */
 function saveApiKey(key) {
   const trimmedKey = (key || '').trim();
-  // Validation is also done client-side; this is a server-side safety net
+  // La validation est également effectuée côté client ; ceci est une sécurité côté serveur
   if (!trimmedKey || trimmedKey.length < 10) {
     return { ok: false, message: 'Clé vide ou trop courte.' };
   }
@@ -1431,14 +1440,14 @@ function saveApiKey(key) {
   }
 }
 
-/** Removes the stored API key from PropertiesService. */
+/** Supprime la clé API enregistrée dans PropertiesService. */
 function clearApiKey() {
   PropertiesService.getScriptProperties().deleteProperty('GEMINI_API_KEY');
   SpreadsheetApp.getActiveSpreadsheet().toast('Clé API supprimée.', 'Configuration');
 }
 
 /**
- * Reads the Results sheet and creates draft emails for evaluated candidates.
+ * Lit la feuille des résultats et génère des brouillons d'emails (via l'IA) pour les candidats évalués.
  */
 function draftEmailsForCandidates() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1455,7 +1464,7 @@ function draftEmailsForCandidates() {
     return;
   }
   
-  // Data starts at row 4
+  // Les données commencent à la ligne 4
   const data = resultsSheet.getRange(4, 1, lastRow - 3, 13).getValues();
   let draftCount = 0;
   
@@ -1468,7 +1477,7 @@ function draftEmailsForCandidates() {
   
   ss.toast("Génération des brouillons en cours...", "📧 Emails", 10);
   
-  // Get API Config for Gemini drafting
+  // Récupérer la configuration de l'API pour la rédaction via Gemini
   const configSheet = ss.getSheetByName("Configuration");
   const config = getConfig(configSheet);
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY') || (config['Clé API Gemini'] || '').toString().trim();
@@ -1488,10 +1497,10 @@ function draftEmailsForCandidates() {
     const recommendation = row[8]; // Colonne I (index 8)
     
     if (!email || email.toLowerCase().includes("non renseigné") || email.toLowerCase().includes("inconnu") || !email.includes("@")) {
-      continue; // Skip if no valid email
+      continue; // Ignorer s'il n'y a pas d'adresse email valide
     }
     
-    // We only draft for "À contacter" or "À refuser"
+    // On ne génère un brouillon que pour "À contacter" ou "À refuser"
     if (recommendation !== "À contacter" && recommendation !== "À refuser") {
       continue;
     }
