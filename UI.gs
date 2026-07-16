@@ -73,7 +73,8 @@ function setupSheets() {
     ["Type de compte Gemini", existingConfig['Type de compte Gemini'] || "Gratuit (Free tier)", "Passez en mode 'Payant' pour analyser beaucoup plus vite (vérifiez votre palier RPM dans Google AI Studio)"],
     ["Critères spécifiques du recruteur", existingConfig['Critères spécifiques du recruteur'] !== undefined ? existingConfig['Critères spécifiques du recruteur'] : "", "Ex: 'Priorité aux compétences React, être bilingue anglais' (optionnel)"],
     ["Prompt système", existingConfig['Prompt système'] || DEFAULT_PROMPT, "Le prompt système utilisé pour l'analyse. Laissez {{JOB_DESCRIPTION}} et {{CRITERIA}} intacts."],
-    ["Délai de rétention RGPD (jours)", existingConfig['Délai de rétention RGPD (jours)'] !== undefined ? existingConfig['Délai de rétention RGPD (jours)'] : 730, "Les CV plus anciens seront supprimés et anonymisés (Ex: 730 pour 2 ans)"]
+    ["Délai de rétention RGPD (jours)", existingConfig['Délai de rétention RGPD (jours)'] !== undefined ? existingConfig['Délai de rétention RGPD (jours)'] : 730, "Les CV plus anciens seront supprimés et anonymisés (Ex: 730 pour 2 ans)"],
+    ["Domaines autorisés", existingConfig['Domaines autorisés'] !== undefined ? existingConfig['Domaines autorisés'] : DEFAULT_ALLOWED_DOMAINS.join(", "), "Liste des sites web autorisés séparés par des virgules pour récupérer le texte des annonces."]
   ];
 
   configSheet.getRange("A2:C100").setBackgroundColor(bgLight);
@@ -109,8 +110,9 @@ function setupSheets() {
 
   configSheet.setRowHeight(8, 70);
   configSheet.setRowHeight(9, 140);
+  configSheet.setRowHeight(10, 70);
 
-  const inputCells = configSheet.getRange("B3:B10");
+  const inputCells = configSheet.getRange("B3:B11");
   inputCells.setWrap(true).setFontSize(11);
 
   const modelCell = configSheet.getRange("B6");

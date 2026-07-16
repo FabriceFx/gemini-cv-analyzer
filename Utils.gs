@@ -49,17 +49,19 @@ function isValidEmail(email) {
 /**
  * Récupère le contenu HTML d'une page web (URL) et retourne le texte brut (scraping).
  * @param {string} url L'URL de l'annonce
+ * @param {string} allowedDomainsStr Liste des domaines séparés par des virgules
  * @returns {string} Le texte brut de l'annonce
  */
-function fetchJobDescription(url) {
+function fetchJobDescription(url, allowedDomainsStr) {
   try {
     const match = url.match(/^https?:\/\/(?:www\.)?([^\/]+)/i);
     if (!match) throw new Error("Format d'URL invalide.");
     const domain = match[1].toLowerCase();
 
     // Vérifier si le domaine est autorisé
-    if (!ALLOWED_DOMAINS.some(allowed => domain.includes(allowed))) {
-      throw new Error(`Domaine non autorisé: ${domain}. Veuillez copier-coller le texte de l'annonce manuellement.`);
+    const allowedList = (allowedDomainsStr || "").split(",").map(d => d.trim().toLowerCase()).filter(d => d);
+    if (!allowedList.some(allowed => domain.includes(allowed))) {
+      throw new Error(`Domaine non autorisé: ${domain}. Veuillez copier-coller le texte de l'annonce manuellement ou l'ajouter aux Domaines autorisés dans la Configuration.`);
     }
   } catch (e) {
     if (e.message.includes("Domaine non autorisé")) throw e;

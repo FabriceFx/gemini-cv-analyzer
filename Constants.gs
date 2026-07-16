@@ -26,6 +26,7 @@
  * @property {string} [Critères spécifiques du recruteur]
  * @property {string} [Prompt système]
  * @property {number} [Délai de rétention RGPD (jours)]
+ * @property {string} [Domaines autorisés]
  */
 
 
@@ -62,7 +63,7 @@ const SUPPORTED_MIME_TYPES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.template", // DOTX
 ];
 
-const ALLOWED_DOMAINS = [
+const DEFAULT_ALLOWED_DOMAINS = [
   "linkedin.com",
   "indeed.com",
   "welcome-to-the-jungle.com",

@@ -387,7 +387,8 @@ function _prepareCommonConfig(configSheet, isInteractive) {
   let jobDescription = annonceInput;
   if (annonceInput.startsWith("http://") || annonceInput.startsWith("https://")) {
     if (isInteractive) SpreadsheetApp.getActiveSpreadsheet().toast("Chargement de l'annonce...", "Annonce 📄");
-    jobDescription = extractJobDescriptionWithGemini(fetchJobDescription(annonceInput), apiKey, model);
+    const allowedDomainsStr = (config['Domaines autorisés'] || DEFAULT_ALLOWED_DOMAINS.join(", ")).toString().trim();
+    jobDescription = extractJobDescriptionWithGemini(fetchJobDescription(annonceInput, allowedDomainsStr), apiKey, model);
   }
 
   let systemPrompt = DEFAULT_PROMPT;
