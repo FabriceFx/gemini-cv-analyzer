@@ -72,5 +72,6 @@ const ALLOWED_DOMAINS = [
   "monster.fr",
   "apside.com",
   "apec.fr",
-  "hellowork.com"
+  "hellowork.com",
+  "talent-soft.com"
 ];
