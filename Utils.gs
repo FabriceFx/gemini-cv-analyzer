@@ -53,8 +53,9 @@ function isValidEmail(email) {
  */
 function fetchJobDescription(url) {
   try {
-    const urlObj = new URL(url);
-    const domain = urlObj.hostname.replace(/^www\./, "");
+    const match = url.match(/^https?:\/\/(?:www\.)?([^\/]+)/i);
+    if (!match) throw new Error("Format d'URL invalide.");
+    const domain = match[1].toLowerCase();
 
     // Vérifier si le domaine est autorisé
     if (!ALLOWED_DOMAINS.some(allowed => domain.includes(allowed))) {
