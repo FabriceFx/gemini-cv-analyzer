@@ -8,7 +8,7 @@
 
 **Un assistant de recrutement intelligent sur Google Sheets utilisant l'API Gemini.**
 
-Cet outil utilise l'API Gemini pour analyser automatiquement des CVs au format PDF et DOCX déposés dans un dossier Google Drive, en les comparant à une offre d'emploi. Il évalue l'adéquation des profils, extrait les coordonnées, et rédige automatiquement les brouillons d'emails de réponse. L'architecture a été modularisée en 9 fichiers pour une meilleure maintenabilité.
+Cet outil utilise l'API Gemini pour analyser automatiquement des CVs au format PDF et DOCX déposés dans un dossier Google Drive, en les comparant à une offre d'emploi. Il évalue l'adéquation des profils, extrait les coordonnées, et rédige automatiquement les brouillons d'emails de réponse. L'architecture a été modularisée en 10 fichiers pour une meilleure maintenabilité.
 
 ### 🚀 Guide d'installation et configuration
 
@@ -21,7 +21,7 @@ Cet outil utilise l'API Gemini pour analyser automatiquement des CVs au format P
 
 #### Étape 3 : copier les fichiers `.gs`
 Le code source est organisé en plusieurs fichiers `.gs` :
-- `Constants.gs`, `Config.gs`, `DriveService.gs`, `EmailService.gs`, `GeminiClient.gs`, `Main.gs`, `RGPD.gs`, `UI.gs`, `Utils.gs`.
+- `Constants.gs`, `Config.gs`, `DriveService.gs`, `EmailService.gs`, `GeminiClient.gs`, `Main.gs`, `RGPD.gs`, `Test.gs`, `UI.gs`, `Utils.gs`.
 1. Dans l'éditeur Apps Script, créez un nouveau script pour chacun de ces fichiers (icône **+** > **Script**).
 2. Copiez-collez le code de chaque fichier correspondant depuis ce dépôt GitHub vers votre éditeur.
 3. Enregistrez (`Cmd + S` / `Ctrl + S`).
@@ -48,15 +48,17 @@ Le code source est organisé en plusieurs fichiers `.gs` :
    - Copiez la clé générée (elle commence souvent par `AIza...`).
    - De retour dans Google Sheets, utilisez le menu **`🚀 Analyseur de CV`** > **`🔑 Configurer la clé API`** pour l'enregistrer de façon sécurisée (elle n'est pas affichée dans la feuille).
 2. **Dossier de CVs** : Collez l'URL de partage de votre dossier Google Drive (contenant les PDF et DOCX) dans la cellule **B4**.
-3. **Annonce** : Collez le texte de l'annonce ou son URL dans la cellule **B5**. *Note : préférez le copier-coller manuel du texte pour les sites modernes (LinkedIn, etc.) dont le scraping est bloqué.*
+3. **Annonce** : Collez le texte de l'annonce ou son URL dans la cellule **B5**. 
+   - *Sécurité (SSRF) :* Le système vérifie que le domaine fait partie des **Domaines autorisés** (définis dans la configuration). Si l'URL est bloquée ou s'il s'agit d'un site complexe (LinkedIn), copiez-collez manuellement le texte.
 4. **Modèle** : Sélectionnez `gemini-3.5-flash` pour le meilleur compromis rapidité/coût.
 5. **Traitements** :
-   * **Scanner le dossier** : Lancez l'analyse groupée depuis le menu pour tous les nouveaux CVs.
+   * **Scanner le dossier** : Lancez l'analyse groupée depuis le menu pour tous les nouveaux CVs. Les documents sont automatiquement divisés en sous-lots optimisés.
    * **Test rapide** : Utilisez le menu "Analyser un seul CV" en fournissant l'URL d'un seul document.
    * **Automatisation** : Activez l'analyse quotidienne depuis le menu pour recevoir un e-mail avec les résultats générés automatiquement chaque nuit.
 
-### ✨ Conformité RGPD & Outils Avancés
+### ✨ Sécurité, Conformité RGPD & Outils Avancés
 
+* **Robustesse** : Le système gère intelligemment les erreurs serveur de l'API (Retry sur HTTP 500/503), parse le JSON de façon hautement sécurisée (ignorant les balises Markdown) et valide les emails générés.
 * **Nettoyage RGPD** : Paramétrez votre délai de rétention. Le menu `🛡️ Nettoyage RGPD` placera les documents expirés dans la corbeille Drive et anonymisera les lignes dans le tableur ("Nom", "Email", "Téléphone") tout en générant un log d'audit dans `Journal RGPD`.
 * **Context Caching** : Pour l'analyse de gros volumes de CV avec de longues descriptions de poste, l'outil utilise nativement le Context Caching de Gemini, réduisant considérablement vos coûts d'API.
 * **Génération de brouillons** : Le script peut préparer dans votre boîte Gmail des e-mails hautement personnalisés pour accepter (proposer un entretien) ou refuser poliment vos candidats, en se basant sur leurs forces et faiblesses.
