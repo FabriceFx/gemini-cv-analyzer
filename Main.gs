@@ -50,34 +50,33 @@ function _runAnalysis(options) {
 
     const startTime = Date.now();
 
-    const config = getConfig(configSheet);
-    const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-    const folderUrl = (config['URL du dossier Drive contenant les CVs'] || '').toString().trim();
-    const annonceInput = (config["URL ou texte de l'annonce"] || '').toString().trim();
-    const model = (config['Modèle Gemini'] || 'gemini-3.5-flash').toString().trim();
-    const accountType = (config['Type de compte Gemini'] || '').toString().trim();
-    const criteria = (config['Critères spécifiques du recruteur'] || '').toString().trim();
-    const rawSystemPrompt = (config['Prompt système'] || '').toString().trim();
-
-    const isPaidAccount = accountType === "Payant (Pay-as-you-go)";
-    const batchSize = isPaidAccount ? GEMINI_PAID_BATCH_SIZE : GEMINI_FREE_BATCH_SIZE;
-    const batchPauseMs = isPaidAccount ? GEMINI_PAID_BATCH_PAUSE_MS : GEMINI_FREE_BATCH_PAUSE_MS;
-
-    let systemPrompt = DEFAULT_PROMPT;
-    if (rawSystemPrompt.includes('{{JOB_DESCRIPTION}}') && rawSystemPrompt.includes('{{CRITERIA}}')) {
-      systemPrompt = rawSystemPrompt;
-    } else if (rawSystemPrompt !== "") {
-      if (isInteractive) ss.toast("Votre prompt personnalisé est invalide (balises manquantes). Le prompt par défaut a été utilisé.", "⚠️ Attention", 8);
-    }
-
-    if (!apiKey || !folderUrl || !annonceInput) {
+    let commonConfig;
+    try {
+      commonConfig = _prepareCommonConfig(configSheet, isInteractive);
+    } catch (e) {
       if (isInteractive) {
-        SpreadsheetApp.getUi().alert("Configuration requise : veuillez vérifier votre clé API, l'URL du dossier et l'annonce.");
+        SpreadsheetApp.getUi().alert(`Configuration requise : ${e.message}`);
       } else {
-        _notifyAutomatedFailure("Configuration incomplète (Clé API, URL dossier ou annonce manquante).");
+        _notifyAutomatedFailure(`Configuration incomplète : ${e.message}`);
       }
       return;
     }
+    const { apiKey, jobDescription, model, criteria, systemPrompt, config } = commonConfig;
+
+    const folderUrl = (config['URL du dossier Drive contenant les CVs'] || '').toString().trim();
+    if (!folderUrl) {
+      if (isInteractive) {
+        SpreadsheetApp.getUi().alert("Erreur de configuration : l'URL du dossier Drive est manquante.");
+      } else {
+        _notifyAutomatedFailure("L'URL du dossier Drive configurée est manquante.");
+      }
+      return;
+    }
+
+    const accountType = (config['Type de compte Gemini'] || '').toString().trim();
+    const isPaidAccount = accountType === "Payant (Pay-as-you-go)";
+    const batchSize = isPaidAccount ? GEMINI_PAID_BATCH_SIZE : GEMINI_FREE_BATCH_SIZE;
+    const batchPauseMs = isPaidAccount ? GEMINI_PAID_BATCH_PAUSE_MS : GEMINI_FREE_BATCH_PAUSE_MS;
 
     const folderId = getFolderIdFromUrl(folderUrl);
     if (!folderId) {
@@ -101,25 +100,6 @@ function _runAnalysis(options) {
       return;
     }
 
-    let jobDescription = "";
-    if (annonceInput.startsWith("http://") || annonceInput.startsWith("https://")) {
-      if (isInteractive) ss.toast("Chargement de l'annonce depuis l'URL...", "Annonce 🌐", 10);
-      try {
-        const rawHtml = fetchJobDescription(annonceInput);
-        if (isInteractive) ss.toast("Nettoyage de la description avec l'IA...", "Annonce 🧠", 10);
-        jobDescription = extractJobDescriptionWithGemini(rawHtml, apiKey, model);
-      } catch (e) {
-        if (isInteractive) {
-          SpreadsheetApp.getUi().alert(`Erreur de récupération : ${e.message}`);
-        } else {
-          _notifyAutomatedFailure(`Erreur lors de la récupération de l'annonce : ${e.message}`);
-        }
-        return;
-      }
-    } else {
-      jobDescription = annonceInput;
-    }
-
     const processedIds = {};
     const lastRow = resultsSheet.getLastRow();
     if (lastRow > 3) {
@@ -135,7 +115,7 @@ function _runAnalysis(options) {
     while (files.hasNext()) {
       const file = files.next();
       const mime = file.getMimeType();
-      if ((mime === MimeType.PDF || mime === MimeType.GOOGLE_DOCS || mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") && !processedIds[file.getId()]) {
+      if (SUPPORTED_MIME_TYPES.includes(mime) && !processedIds[file.getId()]) {
         filesToProcess.push(file);
       }
     }
@@ -288,30 +268,14 @@ function analyzeSingleCV() {
       ui.alert("Veuillez initialiser les feuilles."); return;
     }
 
-    const config = getConfig(configSheet);
-    const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-    if (!apiKey) { ui.alert("Clé API manquante."); return; }
-
-    const annonceInput = (config["URL ou texte de l'annonce"] || '').toString().trim();
-    const model = (config['Modèle Gemini'] || 'gemini-3.5-flash').toString().trim();
-    const criteria = (config['Critères spécifiques du recruteur'] || '').toString().trim();
-    const rawSystemPrompt = (config['Prompt système'] || '').toString().trim();
-    
-    let systemPrompt = DEFAULT_PROMPT;
-    if (rawSystemPrompt.includes('{{JOB_DESCRIPTION}}') && rawSystemPrompt.includes('{{CRITERIA}}')) {
-      systemPrompt = rawSystemPrompt;
-    } else if (rawSystemPrompt !== "") {
-      ss.toast("Votre prompt personnalisé est invalide (balises manquantes). Le prompt par défaut a été utilisé.", "⚠️ Attention", 8);
+    let commonConfig;
+    try {
+      commonConfig = _prepareCommonConfig(configSheet, true);
+    } catch (e) {
+      ui.alert(`Configuration incomplète : ${e.message}`);
+      return;
     }
-
-    let jobDescription = annonceInput;
-    if (annonceInput.startsWith("http")) {
-      try {
-        jobDescription = extractJobDescriptionWithGemini(fetchJobDescription(annonceInput), apiKey, model);
-      } catch (e) {
-        ui.alert("Erreur de récupération de l'annonce: " + e.message); return;
-      }
-    }
+    const { apiKey, jobDescription, model, criteria, systemPrompt } = commonConfig;
 
     ss.toast("Analyse du document en cours...", "Analyse 🔍");
     try {
@@ -397,4 +361,41 @@ function _formatAddedRow(resultsSheet, file, isError = false) {
   resultsSheet.getRange(addedIndex, 11).setHorizontalAlignment("center").setRichTextValue(richTextLink);
   resultsSheet.getRange(addedIndex, 12).setHorizontalAlignment("center").setNumberFormat("dd/MM/yyyy HH:mm");
   SpreadsheetApp.flush();
+}
+
+/**
+ * Prépare la configuration et valide les paramètres communs à analyzeCVs et analyzeSingleCV.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} configSheet
+ * @param {boolean} isInteractive
+ * @returns {{apiKey: string, jobDescription: string, model: string, criteria: string, systemPrompt: string, config: Object}}
+ */
+function _prepareCommonConfig(configSheet, isInteractive) {
+  const config = getConfig(configSheet);
+  const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+  const annonceInput = (config["URL ou texte de l'annonce"] || '').toString().trim();
+  const model = (config['Modèle Gemini'] || 'gemini-3.5-flash').toString().trim();
+  const criteria = (config['Critères spécifiques du recruteur'] || '').toString().trim();
+  const rawSystemPrompt = (config['Prompt système'] || '').toString().trim();
+
+  if (!apiKey) {
+    throw new Error("Clé API manquante.");
+  }
+  if (!annonceInput) {
+    throw new Error("URL ou texte de l'annonce manquant.");
+  }
+
+  let jobDescription = annonceInput;
+  if (annonceInput.startsWith("http://") || annonceInput.startsWith("https://")) {
+    if (isInteractive) SpreadsheetApp.getActiveSpreadsheet().toast("Chargement de l'annonce...", "Annonce 📄");
+    jobDescription = extractJobDescriptionWithGemini(fetchJobDescription(annonceInput), apiKey, model);
+  }
+
+  let systemPrompt = DEFAULT_PROMPT;
+  if (rawSystemPrompt.includes('{{JOB_DESCRIPTION}}') && rawSystemPrompt.includes('{{CRITERIA}}')) {
+    systemPrompt = rawSystemPrompt;
+  } else if (rawSystemPrompt !== "") {
+    if (isInteractive) SpreadsheetApp.getActiveSpreadsheet().toast("Prompt personnalisé invalide. Utilisation du prompt par défaut.", "⚠️ Attention");
+  }
+
+  return { apiKey, jobDescription, model, criteria, systemPrompt, config };
 }

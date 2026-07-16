@@ -92,6 +92,12 @@ function _prepareDocumentEntry(file) {
     throw new Error(`Le fichier "${file.getName()}" est vide (0 octet).`);
   }
 
+  // Ajouter une estimation de tokens (1 token ≈ 4 caractères pour du texte)
+  const estimatedTokens = fileSizeBytes / 4;
+  if (estimatedTokens > MAX_TOTAL_TOKENS_PER_REQUEST) {
+    throw new Error(`Le fichier "${file.getName()}" est trop grand en tokens (${Math.round(estimatedTokens)}). Max: ${MAX_TOTAL_TOKENS_PER_REQUEST}.`);
+  }
+
   let blob, mimeType;
   try {
     blob = file.getBlob();
@@ -173,55 +179,80 @@ function analyzeSingleDocument(file, apiKey, model, jobDescription, criteria, sy
 function analyzeDocumentsBatch(files, apiKey, model, jobDescription, criteria, systemPrompt, cacheName) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-  // Préparation séquentielle (lecture Drive = I/O, la parallélisation ne concerne que l'appel réseau à Gemini)
   const entries = [];
   const prepErrors = [];
-  files.forEach(file => {
+  
+  // Calculer la taille totale estimée du batch
+  let totalEstimatedTokens = 0;
+  for (const file of files) {
     try {
-      entries.push(_prepareDocumentEntry(file));
+      const entry = _prepareDocumentEntry(file);
+      totalEstimatedTokens += entry.base64Data.length / 4; // Estimation grossière
+      entries.push(entry);
     } catch (e) {
       prepErrors.push({ file, error: e.message });
     }
-  });
+  }
 
-  const requests = entries.map(entry => ({
-    url,
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify(_buildDocumentPayload(entry, jobDescription, criteria, systemPrompt, cacheName)),
-    muteHttpExceptions: true
-  }));
+  if (entries.length === 0) {
+    return prepErrors;
+  }
 
-  const responses = requests.length ? UrlFetchApp.fetchAll(requests) : [];
+  // Diviser en sous-batches si trop gros
+  const avgTokensPerFile = totalEstimatedTokens / entries.length;
+  const SUB_BATCH_SIZE = Math.max(1, Math.floor(MAX_BATCH_TOKENS / avgTokensPerFile));
+  
+  const subBatches = [];
+  for (let i = 0; i < entries.length; i += SUB_BATCH_SIZE) {
+    subBatches.push(entries.slice(i, i + SUB_BATCH_SIZE));
+  }
 
+  // Traiter chaque sous-batch séquentiellement
   const results = [...prepErrors];
-  responses.forEach((response, i) => {
-    const entry = entries[i];
-    const code = response.getResponseCode();
+  for (const subBatch of subBatches) {
+    const requests = subBatch.map(entry => ({
+      url,
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify(_buildDocumentPayload(entry, jobDescription, criteria, systemPrompt, cacheName)),
+      muteHttpExceptions: true
+    }));
 
-    if (code === 200) {
-      try {
-        results.push({ file: entry.file, analysis: parseJsonSafely(_extractGeminiText(response.getContentText())) });
-      } catch (e) {
-        results.push({ file: entry.file, error: `Réponse illisible : ${e.message}` });
+    const responses = requests.length ? UrlFetchApp.fetchAll(requests) : [];
+
+    responses.forEach((response, i) => {
+      const entry = subBatch[i];
+      const code = response.getResponseCode();
+
+      if (code === 200) {
+        try {
+          results.push({ file: entry.file, analysis: parseJsonSafely(_extractGeminiText(response.getContentText())) });
+        } catch (e) {
+          results.push({ file: entry.file, error: `Réponse illisible : ${e.message}` });
+        }
+      } else if (code === 429) {
+        // Throttle isolé sur ce document précis : retry solo avec backoff
+        try {
+          const retryText = callGeminiAPI(model, _buildDocumentPayload(entry, jobDescription, criteria, systemPrompt, cacheName), apiKey);
+          results.push({ file: entry.file, analysis: parseJsonSafely(_extractGeminiText(retryText)) });
+        } catch (retryErr) {
+          results.push({ file: entry.file, error: retryErr.message });
+        }
+      } else {
+        let errorMsg = `Erreur HTTP ${code}`;
+        try {
+          const errJson = JSON.parse(response.getContentText());
+          if (errJson && errJson.error && errJson.error.message) errorMsg = errJson.error.message;
+        } catch (e) { }
+        results.push({ file: entry.file, error: errorMsg });
       }
-    } else if (code === 429) {
-      // Throttle isolé sur ce document précis : retry solo avec backoff
-      try {
-        const retryText = callGeminiAPI(model, _buildDocumentPayload(entry, jobDescription, criteria, systemPrompt, cacheName), apiKey);
-        results.push({ file: entry.file, analysis: parseJsonSafely(_extractGeminiText(retryText)) });
-      } catch (retryErr) {
-        results.push({ file: entry.file, error: retryErr.message });
-      }
-    } else {
-      let errorMsg = `Erreur HTTP ${code}`;
-      try {
-        const errJson = JSON.parse(response.getContentText());
-        if (errJson && errJson.error && errJson.error.message) errorMsg = errJson.error.message;
-      } catch (e) { }
-      results.push({ file: entry.file, error: errorMsg });
+    });
+
+    // Pause entre les sous-batches pour éviter le rate limiting (sauf pour le dernier)
+    if (subBatches.length > 1) {
+      Utilities.sleep(1000);
     }
-  });
+  }
 
   return results;
 }
@@ -271,6 +302,10 @@ function generateSessionSynthesis(candidatesSummary, jobDescription, apiKey, mod
 function callGeminiAPI(model, payload, apiKey) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
+  // Masquer la clé API dans les logs
+  const maskedApiKey = apiKey ? `${apiKey.substring(0, 6)}...` : "non définie";
+  Logger.log(`Appel API Gemini avec modèle: ${model}, clé: ${maskedApiKey}`);
+
   const options = {
     method: "post",
     contentType: "application/json",
@@ -278,8 +313,9 @@ function callGeminiAPI(model, payload, apiKey) {
     muteHttpExceptions: true
   };
 
-  const maxRetries = 3;
+  const maxRetries = 5; // Augmenté pour la robustesse
   let delay = 2500;
+  let lastError = null;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const response = UrlFetchApp.fetch(url, options);
@@ -290,10 +326,12 @@ function callGeminiAPI(model, payload, apiKey) {
       return text;
     }
 
-    if (code === 429) {
-      Logger.log(`API Gemini (429 Rate Limit) - Tentative ${attempt + 1}/${maxRetries} - En attente...`);
+    // Gérer les erreurs 500/503 comme les 429
+    if (code === 429 || code === 500 || code === 503) {
+      Logger.log(`API Gemini (${code}) - Tentative ${attempt + 1}/${maxRetries}. Attente: ${delay}ms`);
       Utilities.sleep(delay);
       delay *= 2;
+      lastError = `Erreur ${code} après ${maxRetries} tentatives.`;
       continue;
     }
 
@@ -314,12 +352,11 @@ function callGeminiAPI(model, payload, apiKey) {
     if (code === 403) {
       throw new Error("Accès refusé par l'API Gemini (HTTP 403). Vérifiez votre clé.");
     }
-    if (code === 500 || code === 503) {
-      throw new Error(`Le service Gemini est temporairement indisponible (HTTP ${code}). Veuillez réessayer dans quelques minutes.`);
-    }
 
-    throw new Error(errorMsg);
+    lastError = errorMsg;
+    // Break the loop for other errors (client errors)
+    break;
   }
 
-  throw new Error("Le service API Gemini est saturé (Rate limit). Veuillez réessayer ultérieurement.");
+  throw new Error(lastError || "Échec de l'appel à l'API après plusieurs tentatives.");
 }

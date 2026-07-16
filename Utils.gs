@@ -9,30 +9,41 @@
  * @returns {Object} L'objet JSON parsé
  */
 function parseJsonSafely(text) {
+  if (!text || typeof text !== 'string') {
+    throw new Error("Réponse vide ou invalide de l'API.");
+  }
+
   let cleaned = text.trim();
 
-  // Extraction sécurisée par RegEx (capture l'objet JSON central en ignorant le texte avant/après)
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  // Supprimer les balises Markdown
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
+
+  // Extraire le premier objet JSON valide
+  const jsonMatch = cleaned.match(/\{[^}]*(?:\{[^}]*\}[^}]*)*\}/);
   if (jsonMatch) {
     try {
       return JSON.parse(jsonMatch[0]);
     } catch (e) {
-      // Continue vers le bloc try/catch global si l'extraction par regex échoue
+      Logger.log(`Échec du parsing JSON (match): ${e.message}`);
     }
   }
 
+  // Essayer de parser directement
   try {
     return JSON.parse(cleaned);
   } catch (e) {
-    // Suppression explicite des balises de code Markdown en dernier recours
-    if (cleaned.startsWith("```")) {
-      cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/```$/, "").trim();
-      try {
-        return JSON.parse(cleaned);
-      } catch (nestedErr) { }
-    }
-    throw new Error(`Impossible de décoder l'analyse IA. Assurez-vous que l'annonce est compréhensible. Détail : ${e.message}`);
+    Logger.log(`Échec du parsing JSON (direct): ${e.message}`);
+    throw new Error(`Impossible de décoder l'analyse IA. Assurez-vous que l'annonce est compréhensible. Texte reçu: "${cleaned.substring(0, 200)}..."`);
   }
+}
+
+/**
+ * Valide si une chaîne est une adresse email avec un format correct.
+ * @param {string} email L'adresse email à valider.
+ * @returns {boolean} True si valide, false sinon.
+ */
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 /**
@@ -41,11 +52,25 @@ function parseJsonSafely(text) {
  * @returns {string} Le texte brut de l'annonce
  */
 function fetchJobDescription(url) {
+  try {
+    const urlObj = new URL(url);
+    const domain = urlObj.hostname.replace(/^www\./, "");
+
+    // Vérifier si le domaine est autorisé
+    if (!ALLOWED_DOMAINS.some(allowed => domain.includes(allowed))) {
+      throw new Error(`Domaine non autorisé: ${domain}. Veuillez copier-coller le texte de l'annonce manuellement.`);
+    }
+  } catch (e) {
+    if (e.message.includes("Domaine non autorisé")) throw e;
+    throw new Error(`URL invalide: ${e.message}`);
+  }
+
   const response = UrlFetchApp.fetch(url, {
-    muteHttpExceptions: true,
+    muteHttpExceptions: false, // Désactivé pour voir les erreurs SSL
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
+    },
+    validateHttpsCertificates: true // Vérifier les certificats SSL
   });
 
   const code = response.getResponseCode();

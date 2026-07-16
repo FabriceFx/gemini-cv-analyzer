@@ -10,10 +10,12 @@
  */
 function getFolderIdFromUrl(url) {
   if (!url) return null;
-  const matches = url.match(/folders\/([a-zA-Z0-9-_]{25,})/);
-  if (matches && matches[1]) {
-    return matches[1];
-  }
+  // Support pour les URLs de fichiers (pas seulement dossiers)
+  const folderMatch = url.match(/folders\/([a-zA-Z0-9-_]{25,})/);
+  const fileMatch = url.match(/file\/d\/([a-zA-Z0-9-_]{25,})/);
+  if (folderMatch && folderMatch[1]) return folderMatch[1];
+  if (fileMatch && fileMatch[1]) return fileMatch[1];
+
   if (url.match(/^[a-zA-Z0-9-_]{25,}$/)) {
     return url;
   }

@@ -3,6 +3,32 @@
  * Regroupe les constantes et la configuration par défaut de l'application.
  */
 
+/**
+ * @typedef {Object} AnalysisResult
+ * @property {string} candidateName - Nom du candidat
+ * @property {string} email - Email du candidat
+ * @property {string} phone - Téléphone du candidat
+ * @property {string} experience - Expérience pertinente
+ * @property {string} education - Formation et diplômes
+ * @property {string} skills - Top 3 compétences
+ * @property {string} strengths - Points forts
+ * @property {string} weaknesses - Points faibles
+ * @property {string} recommendation - Recommandation ("À contacter", "À garder en vivier", "À refuser")
+ * @property {number} score - Note sur 5
+ */
+
+/**
+ * @typedef {Object} Config
+ * @property {string} [URL du dossier Drive contenant les CVs]
+ * @property {string} [URL ou texte de l'annonce]
+ * @property {string} [Modèle Gemini]
+ * @property {string} [Type de compte Gemini]
+ * @property {string} [Critères spécifiques du recruteur]
+ * @property {string} [Prompt système]
+ * @property {number} [Délai de rétention RGPD (jours)]
+ */
+
+
 const CONFIG_SHEET_NAME = "Configuration";
 const RESULTS_SHEET_NAME = "Résultats de l'analyse";
 const RGPD_LOG_SHEET_NAME = "Journal RGPD";
@@ -24,3 +50,27 @@ const GEMINI_FREE_BATCH_SIZE = 3;
 const GEMINI_FREE_BATCH_PAUSE_MS = 12000;
 const GEMINI_PAID_BATCH_SIZE = 15;
 const GEMINI_PAID_BATCH_PAUSE_MS = 6000;
+
+const MAX_BATCH_TOKENS = 150000; // Limite estimée pour gemini-3.5-flash
+const MAX_TOTAL_TOKENS_PER_REQUEST = 200000; // Limite par requête
+
+const SUPPORTED_MIME_TYPES = [
+  MimeType.PDF,
+  MimeType.GOOGLE_DOCS,
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword", // DOC
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.template", // DOTX
+];
+
+const ALLOWED_DOMAINS = [
+  "linkedin.com",
+  "indeed.com",
+  "welcome-to-the-jungle.com",
+  "glassdoor.com",
+  "pôle-emploi.fr",
+  "francetravail.fr",
+  "monster.fr",
+  "apside.com",
+  "apec.fr",
+  "hellowork.com"
+];

@@ -63,7 +63,8 @@ function draftEmailsForCandidates() {
     const weaknesses = row[7]; // Colonne H
     const recommendation = row[8]; // Colonne I
 
-    if (!email || email.toLowerCase().includes("non renseigné") || email.toLowerCase().includes("inconnu") || !email.includes("@")) {
+    if (!email || !isValidEmail(email)) {
+      Logger.log(`Email invalide pour ${candidateName}: ${email}`);
       continue;
     }
 
