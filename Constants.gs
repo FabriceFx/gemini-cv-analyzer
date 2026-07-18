@@ -76,3 +76,39 @@ const DEFAULT_ALLOWED_DOMAINS = [
   "hellowork.com",
   "talent-soft.com"
 ];
+
+// Internationalisation (I18N)
+const DICTIONARY = {
+  fr: {
+    menuTitle: '🚀 Analyseur de CV',
+    menuInit: '⚙️ Initialiser / réinitialiser les feuilles',
+    menuConfig: '🔑 Configurer la clé API',
+    menuAnalyzeAll: '🔍 Analyser les nouveaux CV (dossier complet)',
+    menuAnalyzeSingle: '📄 Analyser un seul CV (test rapide)',
+    menuDailyTrigger: '⏰ Activer/désactiver l\'analyse quotidienne',
+    menuDraftEmails: '📧 Générer les emails de réponse (brouillons)',
+    menuPurge: '🛡️ Nettoyage RGPD des anciens CV',
+    menuClear: '🧹 Vider les résultats',
+    menuGuide: '📖 Guide & bonnes pratiques',
+    menuAbout: 'ℹ️ À propos'
+  },
+  en: {
+    menuTitle: '🚀 CV Analyzer',
+    menuInit: '⚙️ Initialize / reset sheets',
+    menuConfig: '🔑 Configure API Key',
+    menuAnalyzeAll: '🔍 Analyze new CVs (Full folder)',
+    menuAnalyzeSingle: '📄 Analyze single CV (Quick test)',
+    menuDailyTrigger: '⏰ Toggle daily analysis trigger',
+    menuDraftEmails: '📧 Draft response emails',
+    menuPurge: '🛡️ GDPR Cleanup of old CVs',
+    menuClear: '🧹 Clear results',
+    menuGuide: '📖 Guide & best practices',
+    menuAbout: 'ℹ️ About'
+  }
+};
+
+function t(key) {
+  const userLocale = Session.getActiveUserLocale() || 'fr';
+  const lang = userLocale.startsWith('en') ? 'en' : 'fr';
+  return DICTIONARY[lang][key] || key;
+}

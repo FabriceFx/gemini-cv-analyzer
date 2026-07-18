@@ -5,22 +5,28 @@
 
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
-  ui.createMenu('🚀 Analyseur de CV')
-    .addItem('⚙️ Initialiser / Réinitialiser les feuilles', 'setupSheets')
-    .addItem('🔑 Configurer la clé API', 'showSetApiKeyDialog')
-    .addSeparator()
-    .addItem('🔍 Analyser les nouveaux CVs (Dossier complet)', 'analyzeCVs')
-    .addItem('📄 Analyser un seul CV (Test rapide)', 'analyzeSingleCV')
-    .addItem('⏰ Activer/Désactiver l\'analyse quotidienne', 'toggleDailyTrigger')
-    .addSeparator()
-    .addItem('📧 Générer les emails de réponse (Brouillons)', 'draftEmailsForCandidates')
-    .addSeparator()
-    .addItem('🛡️ Nettoyage RGPD des anciens CV', 'purgeOldCVs')
-    .addSeparator()
-    .addItem('🧹 Vider les résultats', 'clearResults')
-    .addSeparator()
-    .addItem('📖 Guide & bonnes pratiques', 'showGuide')
-    .addToUi();
+  
+  try {
+    ui.createMenu(t('menuTitle'))
+      .addItem(t('menuInit'), 'setupSheets')
+      .addItem(t('menuConfig'), 'showSetApiKeyDialog')
+      .addSeparator()
+      .addItem(t('menuAnalyzeAll'), 'analyzeCVs')
+      .addItem(t('menuAnalyzeSingle'), 'analyzeSingleCV')
+      .addItem(t('menuDailyTrigger'), 'toggleDailyTrigger')
+      .addSeparator()
+      .addItem(t('menuDraftEmails'), 'draftEmailsForCandidates')
+      .addSeparator()
+      .addItem(t('menuPurge'), 'purgeOldCVs')
+      .addSeparator()
+      .addItem(t('menuClear'), 'clearResults')
+      .addSeparator()
+      .addItem(t('menuGuide'), 'showGuide')
+      .addItem(t('menuAbout'), 'showAboutDialog')
+      .addToUi();
+  } catch (e) {
+    Logger.log("Erreur lors de la création du menu: " + e.message);
+  }
 }
 
 /**
@@ -342,8 +348,8 @@ function showSetApiKeyDialog() {
   </div>
   <div style="margin-bottom: 20px;">
     <label for="apiKey">Nouvelle clé API</label>
-    <input type="text" id="apiKey" placeholder="Collez votre clé commençant par AIza..." autocomplete="off" spellcheck="false" />
-    <p class="hint">\uD83D\uDD12 Votre clé est enregistrée de façon chiffrée dans les propriétés système du script.</p>
+    <input type="password" id="apiKey" placeholder="Collez votre clé commençant par AIza..." autocomplete="off" spellcheck="false" />
+    <p class="hint">🔒 Votre clé est enregistrée de façon chiffrée dans les propriétés système du script.</p>
   </div>
   <div id="feedback"></div>
   <div class="actions">
@@ -375,5 +381,49 @@ function showSetApiKeyDialog() {
 </html>`;
 
   const htmlOutput = HtmlService.createHtmlOutput(html).setWidth(500).setHeight(400);
-  SpreadsheetApp.getUi().showModalDialog(htmlOutput, '\uD83D\uDD11 Configuration API');
+  SpreadsheetApp.getUi().showModalDialog(htmlOutput, '🔑 Configuration API');
+}
+
+function showAboutDialog() {
+  const userLocale = Session.getActiveUserLocale() || 'fr';
+  const isEn = userLocale.startsWith('en');
+  
+  const title = isEn ? "About CV Analyzer" : "À propos de l'Analyseur de CV";
+  const content = isEn ? 
+    "This tool automates CV analysis using Google's Gemini AI, helping you efficiently evaluate candidates against job requirements while remaining GDPR compliant." :
+    "Cet outil automatise l'analyse de CV à l'aide de l'IA Gemini de Google, vous aidant à évaluer efficacement les candidats par rapport aux offres d'emploi tout en restant conforme au RGPD.";
+  
+  const devTitle = isEn ? "Developer" : "Développeur";
+  const closeBtn = isEn ? "Close" : "Fermer";
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; padding: 24px; color: #334155; font-size: 14px; margin: 0; background-color: #ffffff; text-align: center; }
+    h2 { color: #0f172a; margin-top: 0; font-size: 20px; font-weight: 600; margin-bottom: 16px; }
+    p { line-height: 1.6; margin-bottom: 24px; }
+    .dev-info { background-color: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 24px; }
+    .dev-info strong { color: #0f172a; }
+    a { color: #2563eb; text-decoration: none; font-weight: 500; }
+    a:hover { text-decoration: underline; }
+    .btn { background-color: #f1f5f9; color: #475569; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 500; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+    .btn:hover { background-color: #e2e8f0; color: #0f172a; }
+  </style>
+</head>
+<body>
+  <h2>ℹ️ ${title}</h2>
+  <p>${content}</p>
+  <div class="dev-info">
+    <strong>${devTitle} :</strong> Fabrice Faucheux<br><br>
+    <a href="https://faucheux.bzh" target="_blank">https://faucheux.bzh</a>
+  </div>
+  <button class="btn" onclick="google.script.host.close()">${closeBtn}</button>
+</body>
+</html>`;
+
+  const htmlOutput = HtmlService.createHtmlOutput(html).setWidth(400).setHeight(300);
+  SpreadsheetApp.getUi().showModalDialog(htmlOutput, title);
 }

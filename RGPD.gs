@@ -125,18 +125,24 @@ function anonymizeResultsRowsBulk(sheet, idsDict) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 4) return;
   
-  // Lecture optimisée en une seule fois
-  const idsData = sheet.getRange(4, 13, lastRow - 3, 1).getValues();
+  // Lecture optimisée en une seule fois (Colonnes A à M)
+  const range = sheet.getRange(4, 1, lastRow - 3, 13);
+  const data = range.getValues();
+  let modified = false;
   
-  for (let i = 0; i < idsData.length; i++) {
-    const currentId = idsData[i][0];
+  for (let i = 0; i < data.length; i++) {
+    const currentId = data[i][12]; // Colonne 13 (M) : index 12
     if (idsDict[currentId]) {
-      const row = i + 4;
-      sheet.getRange(row, 1).setValue("Anonymisé"); // Candidat
-      sheet.getRange(row, 2).setValue("Anonymisé"); // Email
-      sheet.getRange(row, 3).setValue("Anonymisé"); // Téléphone
-      sheet.getRange(row, 11).setValue("Document purgé"); // Retrait du lien cliquable
+      data[i][0] = "Anonymisé"; // Candidat (A)
+      data[i][1] = "Anonymisé"; // Email (B)
+      data[i][2] = "Anonymisé"; // Téléphone (C)
+      data[i][10] = "Document purgé"; // Fichier CV (K)
+      modified = true;
     }
+  }
+  
+  if (modified) {
+    range.setValues(data);
   }
 }
 
