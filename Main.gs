@@ -12,7 +12,7 @@ function analyzeCVsAutomated() {
 }
 
 function _notifyAutomatedFailure(reason) {
-  const userEmail = Session.getActiveUser().getEmail();
+  const userEmail = Session.getEffectiveUser().getEmail() || Session.getActiveUser().getEmail();
   if (userEmail) {
     MailApp.sendEmail({
       to: userEmail,
@@ -41,7 +41,7 @@ function _runAnalysis(options) {
 
     if (!configSheet || !resultsSheet) {
       if (isInteractive) {
-        SpreadsheetApp.getUi().alert("Erreur : veuillez d'abord initialiser les feuilles via le menu '\u2699\ufe0f Initialiser / Réinitialiser les feuilles'.");
+        SpreadsheetApp.getUi().alert("Erreur : veuillez d'abord initialiser les feuilles via le menu '⚙️ Initialiser / Réinitialiser les feuilles'.");
       } else {
         _notifyAutomatedFailure("Les feuilles Configuration et Résultats sont introuvables.");
       }
@@ -103,10 +103,15 @@ function _runAnalysis(options) {
     const processedIds = {};
     const lastRow = resultsSheet.getLastRow();
     if (lastRow > 3) {
-      const existingIds = resultsSheet.getRange(4, 13, lastRow - 3, 1).getValues();
-      for (let i = 0; i < existingIds.length; i++) {
-        const id = existingIds[i][0].toString().trim();
-        if (id) processedIds[id] = true;
+      const existingData = resultsSheet.getRange(4, 1, lastRow - 3, 13).getValues();
+      for (let i = 0; i < existingData.length; i++) {
+        const row = existingData[i];
+        const reco = (row[COL_INDEX.RECOMMENDATION - 1] || '').toString().trim();
+        const id = (row[COL_INDEX.FILE_ID - 1] || '').toString().trim();
+        // Ne considérer comme déjà traité que si l'analyse a réussi (pas en statut Erreur)
+        if (id && reco !== "Erreur") {
+          processedIds[id] = true;
+        }
       }
     }
 
@@ -121,7 +126,7 @@ function _runAnalysis(options) {
     }
 
     if (filesToProcess.length === 0) {
-      if (isInteractive) SpreadsheetApp.getUi().alert("Aucun nouveau document à analyser. (PDF ou DOCX)");
+      if (isInteractive) SpreadsheetApp.getUi().alert("Aucun nouveau document à analyser. (PDF, Google Doc ou DOCX)");
       return;
     }
 
@@ -139,8 +144,8 @@ function _runAnalysis(options) {
 
     // Tentative de Context Caching si lot important
     let cacheName = null;
-    if (filesToProcess.length >= 3) {
-      if (isInteractive) ss.toast("Préparation du cache pour accélérer l'analyse...", "Cache 🧠");
+    if (filesToProcess.length >= 5) {
+      if (isInteractive) ss.toast("Vérification du cache de contexte...", "Cache 🧠");
       cacheName = createGeminiCache(apiKey, model, systemPrompt, jobDescription, criteria);
     }
 
@@ -162,16 +167,55 @@ function _runAnalysis(options) {
 
       const batchResults = analyzeDocumentsBatch(batch, apiKey, model, jobDescription, criteria, systemPrompt, cacheName);
 
+      const rowsToAdd = [];
+      const richTextLinks = [];
+      const errorRowIndices = [];
+
       batchResults.forEach(result => {
         if (result.analysis) {
-          _appendAnalysisResult(resultsSheet, result.analysis, result.file);
+          rowsToAdd.push([
+            result.analysis.candidateName || "Inconnu",
+            result.analysis.email || "Non renseigné",
+            result.analysis.phone || "Non renseigné",
+            result.analysis.experience || "",
+            result.analysis.education || "",
+            result.analysis.skills || "",
+            result.analysis.strengths || "",
+            result.analysis.weaknesses || "",
+            result.analysis.recommendation || "À garder en vivier",
+            result.analysis.score || 1,
+            result.file.getName(),
+            new Date(),
+            result.file.getId()
+          ]);
+          richTextLinks.push({ name: result.file.getName(), url: result.file.getUrl() });
           successCount++;
         } else {
           Logger.log(`Erreur CV (${result.file.getName()}) : ${result.error}`);
-          _appendErrorResult(resultsSheet, result.file, result.error);
+          rowsToAdd.push([
+            "Erreur d'analyse",
+            "",
+            "",
+            "",
+            "",
+            "",
+            `Une erreur s'est produite : ${result.error}`,
+            "",
+            "Erreur",
+            0,
+            result.file.getName(),
+            new Date(),
+            result.file.getId()
+          ]);
+          richTextLinks.push({ name: result.file.getName(), url: result.file.getUrl() });
+          errorRowIndices.push(rowsToAdd.length - 1);
           errorCount++;
         }
       });
+
+      if (rowsToAdd.length > 0) {
+        _appendBatchResults(resultsSheet, rowsToAdd, richTextLinks, errorRowIndices);
+      }
 
       // Pause entre lots pour respecter le quota RPM (sauf après le tout dernier lot)
       if (batchStart + batchSize < filesToProcess.length) {
@@ -186,20 +230,25 @@ function _runAnalysis(options) {
     let topContactCount = 0;
     const finalLastRow = resultsSheet.getLastRow();
     if (finalLastRow > 3) {
-      resultsSheet.getRange(4, 1, finalLastRow - 3, 13).sort({ column: 10, ascending: false });
+      resultsSheet.getRange(4, 1, finalLastRow - 3, 13).sort({ column: COL_INDEX.SCORE, ascending: false });
       topContactCount = _optimizeContactRecommendations(resultsSheet);
     }
 
     // Synthèse globale
     if (resultsSheet.getLastRow() > 3) {
       const candidatesData = resultsSheet.getRange(4, 1, resultsSheet.getLastRow() - 3, 10).getValues();
-      const summaryList = candidatesData.map(c => `- ${c[0]} : Note ${c[9]}/5, Reco: ${c[8]}`);
-      try {
-        if (isInteractive) ss.toast("Génération de la synthèse...", "Synthèse 🧠", 10);
-        const sessionSynthesis = generateSessionSynthesis(summaryList.join("\n"), jobDescription, apiKey, model);
-        resultsSheet.getRange("A2").setValue(`Synthèse globale : ${sessionSynthesis}`);
-      } catch (synthErr) {
-        resultsSheet.getRange("A2").setValue("Synthèse globale : Analyse terminée.");
+      const summaryList = candidatesData
+        .filter(c => c[COL_INDEX.RECOMMENDATION - 1] !== "Erreur")
+        .map(c => `- ${c[0]} : Note ${c[COL_INDEX.SCORE - 1]}/5, Reco: ${c[COL_INDEX.RECOMMENDATION - 1]}`);
+      
+      if (summaryList.length > 0) {
+        try {
+          if (isInteractive) ss.toast("Génération de la synthèse...", "Synthèse 🧠", 10);
+          const sessionSynthesis = generateSessionSynthesis(summaryList.join("\n"), jobDescription, apiKey, model);
+          resultsSheet.getRange("A2").setValue(`Synthèse globale : ${sessionSynthesis}`);
+        } catch (synthErr) {
+          resultsSheet.getRange("A2").setValue("Synthèse globale : Analyse terminée.");
+        }
       }
     }
 
@@ -207,18 +256,18 @@ function _runAnalysis(options) {
     if (successCount > 0) {
       endMessage += `\n🎯 ${topContactCount} profil${topContactCount > 1 ? 's retenus' : ' retenu'} pour la prise de contact (Top ${MAX_CONTACT_CANDIDATES} max qualifiés).`;
     }
-    if (errorCount > 0) endMessage += `\n⚠️ ${errorCount} fichier(s) en erreur.`;
-    if (stoppedByTimeout) endMessage += "\n\n⚠️ L'analyse a été mise en pause. Relancez pour la suite.";
+    if (errorCount > 0) endMessage += `\n⚠️ ${errorCount} fichier(s) en erreur (pourront être réanalysés).`;
+    if (stoppedByTimeout) endMessage += "\n\n⚠️ L'analyse a été mise en pause en raison du temps limite. Relancez pour poursuivre.";
     
     if (isInteractive) {
       SpreadsheetApp.getUi().alert(`Bilan : ${endMessage}`);
     } else {
-      const userEmail = Session.getActiveUser().getEmail();
+      const userEmail = Session.getEffectiveUser().getEmail() || Session.getActiveUser().getEmail();
       if (userEmail) {
         MailApp.sendEmail({
           to: userEmail,
           subject: "🤖 Analyse de CV automatique terminée",
-          body: `Bonjour,\n\nVotre analyse de CV automatique vient de se terminer avec succès.\n\n${endMessage}\n\nConsultez votre fichier Google Sheets pour découvrir les résultats.\n\nL'équipe AI.`
+          body: `Bonjour,\n\nVotre analyse de CV automatique vient de se terminer.\n\n${endMessage}\n\nConsultez votre fichier Google Sheets pour découvrir les résultats.\n\nL'équipe AI.`
         });
       }
     }
@@ -260,7 +309,7 @@ function analyzeSingleCV() {
     }
     
     const mime = file.getMimeType();
-    if (mime !== MimeType.PDF && mime !== MimeType.GOOGLE_DOCS && mime !== "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    if (!SUPPORTED_MIME_TYPES.includes(mime)) {
       ui.alert(`Format non supporté (${mime}). Veuillez fournir un fichier au format PDF, DOCX ou un Google Doc.`);
       return;
     }
@@ -288,11 +337,31 @@ function analyzeSingleCV() {
       if (analysis.recommendation === "À contacter" && analysis.score < MIN_CONTACT_SCORE) {
         analysis.recommendation = analysis.score <= 2 ? "À refuser" : "À garder en vivier";
       }
-      _appendAnalysisResult(resultsSheet, analysis, file);
+
+      const row = [
+        analysis.candidateName || "Inconnu",
+        analysis.email || "Non renseigné",
+        analysis.phone || "Non renseigné",
+        analysis.experience || "",
+        analysis.education || "",
+        analysis.skills || "",
+        analysis.strengths || "",
+        analysis.weaknesses || "",
+        analysis.recommendation || "À garder en vivier",
+        analysis.score || 1,
+        file.getName(),
+        new Date(),
+        file.getId()
+      ];
+      _appendBatchResults(resultsSheet, [row], [{ name: file.getName(), url: file.getUrl() }], []);
+
       ui.alert(`Analyse réussie pour : ${analysis.candidateName}\nRecommandation: ${analysis.recommendation}\nNote: ${analysis.score}/5`);
     } catch (err) {
       ui.alert("Erreur lors de l'analyse : " + err.message);
-      _appendErrorResult(resultsSheet, file, err.message);
+      const errorRow = [
+        "Erreur d'analyse", "", "", "", "", "", `Une erreur s'est produite : ${err.message}`, "", "Erreur", 0, file.getName(), new Date(), file.getId()
+      ];
+      _appendBatchResults(resultsSheet, [errorRow], [{ name: file.getName(), url: file.getUrl() }], [0]);
     }
   } finally {
     lock.releaseLock();
@@ -300,7 +369,7 @@ function analyzeSingleCV() {
 }
 
 /**
- * Active ou désactive un déclencheur quotidien pour l'analyse en arrière-plan.
+ * Active ou désactive un déclencheur quotidien pour l'analyse en arrière-plan (fixé à 02h00).
  */
 function toggleDailyTrigger() {
   const triggers = ScriptApp.getProjectTriggers();
@@ -311,8 +380,8 @@ function toggleDailyTrigger() {
       return;
     }
   }
-  ScriptApp.newTrigger('analyzeCVsAutomated').timeBased().everyDays(1).create();
-  SpreadsheetApp.getActiveSpreadsheet().toast("Analyse automatique activée (quotidienne).", "On ⏰");
+  ScriptApp.newTrigger('analyzeCVsAutomated').timeBased().everyDays(1).atHour(2).create();
+  SpreadsheetApp.getActiveSpreadsheet().toast("Analyse automatique activée (quotidienne à 02h00).", "On ⏰");
 }
 
 function clearResults() {
@@ -333,50 +402,40 @@ function clearResults() {
   }
 }
 
-// Helpers internes
-function _appendAnalysisResult(resultsSheet, analysis, file) {
-  const fileName = file.getName();
-  const newRow = [
-    analysis.candidateName || "Inconnu", analysis.email || "Non renseigné",
-    analysis.phone ? "'" + analysis.phone : "Non renseigné",
-    analysis.experience || "", analysis.education || "", analysis.skills || "",
-    analysis.strengths || "", analysis.weaknesses || "",
-    analysis.recommendation || "À garder en vivier", analysis.score || 1,
-    fileName, new Date(), file.getId()
-  ];
-  resultsSheet.appendRow(newRow);
-  _formatAddedRow(resultsSheet, file);
-}
-
-function _appendErrorResult(resultsSheet, file, errorMsg) {
-  const fileName = file.getName();
-  const errorRow = [
-    "Erreur analyse", "", "", "", "", "", `Une erreur s'est produite : ${errorMsg}`, "", "À refuser", 1, fileName, new Date(), file.getId()
-  ];
-  resultsSheet.appendRow(errorRow);
-  _formatAddedRow(resultsSheet, file, true);
-}
-
-function _formatAddedRow(resultsSheet, file, isError = false) {
-  const addedIndex = resultsSheet.getLastRow();
-  const richTextLink = SpreadsheetApp.newRichTextValue().setText(file.getName()).setLinkUrl(file.getUrl()).build();
+/**
+ * Écrit un lot de résultats dans la feuille et applique le formatage en une seule opération groupée.
+ */
+function _appendBatchResults(resultsSheet, rows, richTextLinks, errorIndices) {
+  const startRow = resultsSheet.getLastRow() + 1;
+  const numRows = rows.length;
   
-  resultsSheet.getRange(addedIndex, 1, 1, 13).setVerticalAlignment("top").setWrap(true).setFontFamily("Inter");
-  if (isError) resultsSheet.getRange(addedIndex, 1, 1, 13).setFontColor("#dc2626");
-  
-  resultsSheet.getRange(addedIndex, 9).setHorizontalAlignment("center").setFontWeight("bold");
-  resultsSheet.getRange(addedIndex, 10).setHorizontalAlignment("center").setFontWeight("bold").setNumberFormat("0");
-  resultsSheet.getRange(addedIndex, 11).setHorizontalAlignment("center").setRichTextValue(richTextLink);
-  resultsSheet.getRange(addedIndex, 12).setHorizontalAlignment("center").setNumberFormat("dd/MM/yyyy HH:mm");
-  SpreadsheetApp.flush();
+  const range = resultsSheet.getRange(startRow, 1, numRows, 13);
+  range.setValues(rows);
+  range.setVerticalAlignment("top").setWrap(true).setFontFamily("Inter");
+
+  // Formatage des liens RichText pour les fichiers
+  const richTextValues = richTextLinks.map(link => [
+    SpreadsheetApp.newRichTextValue().setText(link.name).setLinkUrl(link.url).build()
+  ]);
+  resultsSheet.getRange(startRow, COL_INDEX.FILE_LINK, numRows, 1)
+    .setRichTextValues(richTextValues)
+    .setHorizontalAlignment("center")
+    .setFontColor("#64748b");
+
+  resultsSheet.getRange(startRow, COL_INDEX.RECOMMENDATION, numRows, 1).setHorizontalAlignment("center").setFontWeight("bold");
+  resultsSheet.getRange(startRow, COL_INDEX.SCORE, numRows, 1).setHorizontalAlignment("center").setFontWeight("bold").setNumberFormat("0");
+  resultsSheet.getRange(startRow, COL_INDEX.DATE, numRows, 1).setHorizontalAlignment("center").setNumberFormat("dd/MM/yyyy HH:mm");
+
+  if (errorIndices && errorIndices.length > 0) {
+    errorIndices.forEach(idx => {
+      resultsSheet.getRange(startRow + idx, 1, 1, 13).setFontColor("#dc2626");
+    });
+  }
 }
 
 /**
  * Harmonise les recommandations de prise de contact après analyse et tri.
- * Ne retient en statut "À contacter" que les profils qualifiés (note >= MIN_CONTACT_SCORE),
- * et limite ce statut aux MAX_CONTACT_CANDIDATES (10) meilleurs CVs maximum.
- * S'il y a moins de 10 candidats qualifiés, seuls ceux-ci restent "À contacter".
- * Les candidats au-delà du 10e sont basculés en "À garder en vivier".
+ * N'écrit QUE sur la colonne Recommandation (col 9) pour préserver strictement les liens et les formats de téléphones.
  * 
  * @param {GoogleAppsScript.Spreadsheet.Sheet} resultsSheet
  * @returns {number} Nombre de candidats retenus en prise de contact
@@ -385,42 +444,35 @@ function _optimizeContactRecommendations(resultsSheet) {
   const lastRow = resultsSheet.getLastRow();
   if (lastRow < 4) return 0;
 
-  const range = resultsSheet.getRange(4, 1, lastRow - 3, 13);
-  const data = range.getValues();
-  let contactCount = 0;
+  const numRows = lastRow - 3;
+  // Lire uniquement Recommandation (col 9) et Note (col 10)
+  const data = resultsSheet.getRange(4, COL_INDEX.RECOMMENDATION, numRows, 2).getValues();
+  
+  const candidateObjects = data.map(row => ({
+    recommendation: row[0],
+    score: row[1]
+  }));
+
+  const newRecos = computeContactRecommendations(candidateObjects, MAX_CONTACT_CANDIDATES, MIN_CONTACT_SCORE);
+
   let hasChanges = false;
+  let contactCount = 0;
+  const recoColumnData = [];
 
-  for (let i = 0; i < data.length; i++) {
-    const row = data[i];
-    const reco = (row[8] || '').toString().trim(); // Colonne 9 (I) : Recommandation
-    const score = Number(row[9]) || 0;            // Colonne 10 (J) : Note / 5
-
-    // Profil éligible à la prise de contact : note suffisante (>= MIN_CONTACT_SCORE) et pas explicitement à refuser
-    const isQualifying = (reco === "À contacter" || score >= MIN_CONTACT_SCORE) && reco !== "À refuser" && score >= 3;
-
-    if (isQualifying && score >= MIN_CONTACT_SCORE) {
-      if (contactCount < MAX_CONTACT_CANDIDATES) {
-        if (row[8] !== "À contacter") {
-          row[8] = "À contacter";
-          hasChanges = true;
-        }
-        contactCount++;
-      } else {
-        // Au-delà du top 10 : bascule en vivier pour ne pas saturer la prise de contact
-        if (row[8] === "À contacter") {
-          row[8] = "À garder en vivier";
-          hasChanges = true;
-        }
-      }
-    } else if (reco === "À contacter" && score < MIN_CONTACT_SCORE) {
-      // Si la note est insuffisante pour une prise de contact active (< 4), basculer en vivier ou refuser
-      row[8] = score <= 2 ? "À refuser" : "À garder en vivier";
+  for (let i = 0; i < numRows; i++) {
+    const updatedReco = newRecos[i];
+    if (updatedReco === "À contacter") {
+      contactCount++;
+    }
+    if (updatedReco !== data[i][0]) {
       hasChanges = true;
     }
+    recoColumnData.push([updatedReco]);
   }
 
   if (hasChanges) {
-    range.setValues(data);
+    // Écriture ciblée sur la colonne Recommandation uniquement
+    resultsSheet.getRange(4, COL_INDEX.RECOMMENDATION, numRows, 1).setValues(recoColumnData);
   }
 
   return contactCount;

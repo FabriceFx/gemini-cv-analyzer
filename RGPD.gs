@@ -1,11 +1,11 @@
 /**
  * RGPD.gs
- * Gestion de la conformité, purge et anonymisation des données.
+ * Gestion de la conformité, purge et pseudonymisation des données.
  */
 
 /**
  * Supprime les CV du dossier Drive dont la date dépasse le délai de conservation RGPD.
- * Les place dans la corbeille par sécurité, anonymise les données dans la feuille, et écrit dans le journal.
+ * Les place dans la corbeille par sécurité, pseudonymise les données d'identification dans la feuille, et écrit dans le journal.
  */
 function purgeOldCVs() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -13,7 +13,7 @@ function purgeOldCVs() {
   const resultsSheet = ss.getSheetByName(RESULTS_SHEET_NAME);
 
   if (!configSheet || !resultsSheet) {
-    SpreadsheetApp.getUi().alert("Erreur : veuillez d'abord initialiser les feuilles via le menu '\u2699\ufe0f Initialiser / Réinitialiser les feuilles'.");
+    SpreadsheetApp.getUi().alert("Erreur : veuillez d'abord initialiser les feuilles via le menu '⚙️ Initialiser / Réinitialiser les feuilles'.");
     return;
   }
 
@@ -70,7 +70,7 @@ function purgeOldCVs() {
 
   const confirmResponse = SpreadsheetApp.getUi().alert(
     "🛡️ Confirmation nettoyage RGPD",
-    `Vous allez mettre à la corbeille tous les CVs déposés AVANT le ${cutoffDate.toLocaleDateString()} (soit plus de ${retentionDays} jours) et anonymiser leurs lignes correspondantes.\n\nCette action est réversible depuis la corbeille Google Drive pendant 30 jours (les données du tableur, elles, seront anonymisées).\n\nConfirmer ?`,
+    `Vous allez mettre à la corbeille tous les CVs déposés AVANT le ${cutoffDate.toLocaleDateString()} (soit plus de ${retentionDays} jours) et pseudonymiser leurs données d'identification.\n\nCette action est réversible depuis la corbeille Google Drive pendant 30 jours (les données du tableur seront pseudonymisées).\n\nConfirmer ?`,
     SpreadsheetApp.getUi().ButtonSet.YES_NO
   );
   if (confirmResponse !== SpreadsheetApp.getUi().Button.YES) {
@@ -88,13 +88,13 @@ function purgeOldCVs() {
     const file = files.next();
     const mimeType = file.getMimeType();
     
-    if ((mimeType === MimeType.PDF || mimeType === MimeType.GOOGLE_DOCS || mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") && file.getDateCreated() < cutoffDate) {
+    if (SUPPORTED_MIME_TYPES.includes(mimeType) && file.getDateCreated() < cutoffDate) {
       try {
         const fileId = file.getId();
         file.setTrashed(true);
         deletedCount++;
         idsToAnonymize[fileId] = true;
-        logRGPDAction(fileId, "Mis à la corbeille et données anonymisées");
+        logRGPDAction(fileId, "Mis à la corbeille et données pseudonymisées");
       } catch (trashErr) {
         Logger.log(`Impossible de traiter ${file.getName()} : ${trashErr.message}`);
         errorCount++;
@@ -106,7 +106,7 @@ function purgeOldCVs() {
     anonymizeResultsRowsBulk(resultsSheet, idsToAnonymize);
   }
 
-  let purgeMessage = `${deletedCount} document${deletedCount > 1 ? 's' : ''} datant d'avant le ${cutoffDate.toLocaleDateString()} ${deletedCount > 1 ? 'ont été déplacés' : 'a été déplacé'} vers la corbeille et ${deletedCount > 1 ? 'anonymisés' : 'anonymisé'} dans le classeur.`;
+  let purgeMessage = `${deletedCount} document${deletedCount > 1 ? 's' : ''} datant d'avant le ${cutoffDate.toLocaleDateString()} ${deletedCount > 1 ? 'ont été déplacés' : 'a été déplacé'} vers la corbeille et ${deletedCount > 1 ? 'pseudonymisés' : 'pseudonymisé'} dans le classeur.`;
 
   if (errorCount > 0) {
     purgeMessage += `\n\n⚠️ ${errorCount} fichier(s) n'ont pas pu être traités correctement.`;
@@ -119,30 +119,33 @@ function purgeOldCVs() {
 }
 
 /**
- * Remplace les données identifiantes par 'Anonymisé' pour plusieurs fichiers de manière optimisée.
+ * Remplace les données identifiantes par 'Pseudonymisé' pour plusieurs fichiers de manière optimisée et ciblée.
+ * Ne modifie que les colonnes A, B, C et K pour préserver les formules et formats des autres colonnes.
  */
 function anonymizeResultsRowsBulk(sheet, idsDict) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 4) return;
   
-  // Lecture optimisée en une seule fois (Colonnes A à M)
-  const range = sheet.getRange(4, 1, lastRow - 3, 13);
-  const data = range.getValues();
+  const numRows = lastRow - 3;
+  const idValues = sheet.getRange(4, COL_INDEX.FILE_ID, numRows, 1).getValues();
+  const identData = sheet.getRange(4, 1, numRows, 3).getValues(); // Colonnes A (Nom), B (Email), C (Téléphone)
+  const fileData = sheet.getRange(4, COL_INDEX.FILE_LINK, numRows, 1).getValues(); // Colonne K (Lien Fichier)
+
   let modified = false;
-  
-  for (let i = 0; i < data.length; i++) {
-    const currentId = data[i][12]; // Colonne 13 (M) : index 12
+  for (let i = 0; i < numRows; i++) {
+    const currentId = (idValues[i][0] || '').toString().trim();
     if (idsDict[currentId]) {
-      data[i][0] = "Anonymisé"; // Candidat (A)
-      data[i][1] = "Anonymisé"; // Email (B)
-      data[i][2] = "Anonymisé"; // Téléphone (C)
-      data[i][10] = "Document purgé"; // Fichier CV (K)
+      identData[i][0] = "Pseudonymisé"; // Candidat (A)
+      identData[i][1] = "Pseudonymisé"; // Email (B)
+      identData[i][2] = "Pseudonymisé"; // Téléphone (C)
+      fileData[i][0] = "Document purgé"; // Fichier CV (K)
       modified = true;
     }
   }
   
   if (modified) {
-    range.setValues(data);
+    sheet.getRange(4, 1, numRows, 3).setValues(identData);
+    sheet.getRange(4, COL_INDEX.FILE_LINK, numRows, 1).setValues(fileData);
   }
 }
 

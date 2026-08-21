@@ -34,7 +34,24 @@ const CONFIG_SHEET_NAME = "Configuration";
 const RESULTS_SHEET_NAME = "Résultats de l'analyse";
 const RGPD_LOG_SHEET_NAME = "Journal RGPD";
 
-const DEFAULT_PROMPT = "Agis en tant que Recruteur Senior. Je te fournis l'offre d'emploi suivante :\n{{JOB_DESCRIPTION}}\n\net le CV d'un candidat. Tu ne dois rien inventer et tu ne dois faire aucune interprétation : réfère-toi uniquement aux données explicites du CV et de l'offre d'emploi.\n\nConsignes spécifiques du recruteur :\n{{CRITERIA}}\n\nConsignes de mise en forme et de logique :\nFormat du texte : N'utilise jamais de puces (points ou tirets) pour séparer les idées dans les champs texte. Privilégie des parenthèses ou du texte fluide. Pour les compétences, indique le statut général (Oui / Non / Partiel) suivi des éléments précis entre parenthèses, par exemple : 'Oui (compétence X, compétence Y)' ou 'Partiel (compétence Z)'.\nRègle d'évaluation : Sois rigoureux et sélectif. Attribue 'À contacter' uniquement aux profils présentant une très bonne adéquation (note de 4 ou 5 sur 5) et qui méritent réellement une prise de contact. Pour les profils moyens ou avec des manques partiels, attribue 'À garder en vivier' (note de 3). Pour les profils inadaptés, attribue 'À refuser' (note de 1 ou 2).\n\nIntitule ton rapport : 'Analyse des CV par l'IA'.";
+// Index des colonnes de la feuille Résultats (1-based)
+const COL_INDEX = {
+  CANDIDATE: 1,
+  EMAIL: 2,
+  PHONE: 3,
+  EXPERIENCE: 4,
+  EDUCATION: 5,
+  SKILLS: 6,
+  STRENGTHS: 7,
+  WEAKNESSES: 8,
+  RECOMMENDATION: 9,
+  SCORE: 10,
+  FILE_LINK: 11,
+  DATE: 12,
+  FILE_ID: 13
+};
+
+const DEFAULT_PROMPT = "Agis en tant que Recruteur Senior. Je te fournis l'offre d'emploi suivante :\n{{JOB_DESCRIPTION}}\n\net le CV d'un candidat. Tu ne dois rien inventer et tu ne dois faire aucune interprétation : réfère-toi uniquement aux données explicites du CV et de l'offre d'emploi.\n\nConsignes spécifiques du recruteur :\n{{CRITERIA}}\n\nPrincipe de non-discrimination : Fais abstraction totale de toute information relative à l'âge, au genre, à la photo, à l'adresse postale, à la nationalité ou à l'origine du candidat. Évalue uniquement les compétences, l'expérience et l'adéquation objective avec les critères du poste.\n\nConsignes de mise en forme et de logique :\nFormat du texte : N'utilise jamais de puces (points ou tirets) pour séparer les idées dans les champs texte. Privilégie des parenthèses ou du texte fluide. Pour les compétences, indique le statut général (Oui / Non / Partiel) suivi des éléments précis entre parenthèses, par exemple : 'Oui (compétence X, compétence Y)' ou 'Partiel (compétence Z)'.\nRègle d'évaluation : Sois rigoureux et sélectif. Attribue 'À contacter' uniquement aux profils présentant une très bonne adéquation (note de 4 ou 5 sur 5) et qui méritent réellement une prise de contact. Pour les profils moyens ou avec des manques partiels, attribue 'À garder en vivier' (note de 3). Pour les profils inadaptés, attribue 'À refuser' (note de 1 ou 2).\n\nIntitule ton rapport : 'Analyse des CV par l'IA'.";
 
 // Liste des modèles Gemini supportés et recommandés
 const AVAILABLE_MODELS = [
@@ -57,15 +74,10 @@ const GEMINI_FREE_BATCH_PAUSE_MS = 12000;
 const GEMINI_PAID_BATCH_SIZE = 15;
 const GEMINI_PAID_BATCH_PAUSE_MS = 6000;
 
-const MAX_BATCH_TOKENS = 150000; // Limite estimée par lot
-const MAX_TOTAL_TOKENS_PER_REQUEST = 200000; // Limite par requête
-
 const SUPPORTED_MIME_TYPES = [
   MimeType.PDF,
   MimeType.GOOGLE_DOCS,
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/msword", // DOC
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.template", // DOTX
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document" // DOCX
 ];
 
 const DEFAULT_ALLOWED_DOMAINS = [
@@ -73,7 +85,7 @@ const DEFAULT_ALLOWED_DOMAINS = [
   "indeed.com",
   "welcome-to-the-jungle.com",
   "glassdoor.com",
-  "pôle-emploi.fr",
+  "pole-emploi.fr",
   "francetravail.fr",
   "monster.fr",
   "apside.com",

@@ -15,7 +15,7 @@ En Apps Script, on ne stocke **jamais** cette clé en clair dans le code. On uti
 ```javascript
 // Récupération sécurisée de la clé API  
 const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');  
-const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
+const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent";
 ```
 
 > **💡 L'astuce pédagogique :** L'endpoint utilise ici le modèle de dernière génération `gemini-3.7-flash`, extrêmement rapide, intelligent et économique pour l'analyse de documents volumineux.
@@ -73,14 +73,17 @@ C'est le secret de l'automatisation robuste ! Mon code Apps Script n'aura pas à
 
 ---
 
-## 3. L'envoi du message : UrlFetchApp
+## 3. L'envoi du message : UrlFetchApp & En-tête sécurisé
 
-Google Apps Script possède une fonction native pour discuter avec les API : `UrlFetchApp`. C'est le postier qui amène notre colis.
+Google Apps Script possède une fonction native pour discuter avec les API : `UrlFetchApp`. C'est le postier qui amène notre colis. Pour protéger notre clé API, nous la passons dans un **en-tête HTTP sécurisé (`x-goog-api-key`)** plutôt que dans l'URL :
 
 ```javascript
 const options = {  
   method: 'post',                     
-  contentType: 'application/json',    
+  contentType: 'application/json',
+  headers: {
+    'x-goog-api-key': apiKey
+  },
   payload: JSON.stringify(payload),   
   muteHttpExceptions: true            
 };

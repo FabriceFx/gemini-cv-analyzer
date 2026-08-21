@@ -23,8 +23,8 @@ function draftEmailsForCandidates() {
   let contactCandidates = 0;
   let rejectCandidates = 0;
   for (let i = 0; i < data.length; i++) {
-    const email = data[i][1];
-    const recommendation = data[i][8];
+    const email = data[i][COL_INDEX.EMAIL - 1];
+    const recommendation = data[i][COL_INDEX.RECOMMENDATION - 1];
     if (email && email.includes("@") && !email.toLowerCase().includes("non renseigné")) {
       if (recommendation === "À contacter" && contactCandidates < MAX_CONTACT_CANDIDATES) {
         contactCandidates++;
@@ -66,11 +66,11 @@ function draftEmailsForCandidates() {
 
   for (let i = 0; i < data.length; i++) {
     const row = data[i];
-    const candidateName = row[0];
-    const email = row[1];
-    const strengths = row[6]; // Colonne G
-    const weaknesses = row[7]; // Colonne H
-    const recommendation = row[8]; // Colonne I
+    const candidateName = row[COL_INDEX.CANDIDATE - 1];
+    const email = row[COL_INDEX.EMAIL - 1];
+    const strengths = row[COL_INDEX.STRENGTHS - 1];
+    const weaknesses = row[COL_INDEX.WEAKNESSES - 1];
+    const recommendation = row[COL_INDEX.RECOMMENDATION - 1];
 
     if (!email || !isValidEmail(email)) {
       Logger.log(`Email invalide pour ${candidateName}: ${email}`);

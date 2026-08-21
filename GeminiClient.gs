@@ -1,6 +1,6 @@
 /**
  * GeminiClient.gs
- * Client pour l'API Gemini : gestion du cache, appels, et extraction.
+ * Client pour l'API Gemini : gestion des appels, schémas JSON et extraction.
  */
 
 /**
@@ -9,8 +9,12 @@
  * @returns {string|null} Le nom du cache créé, ou null si non applicable.
  */
 function createGeminiCache(apiKey, model, systemPrompt, jobDescription, criteria) {
-  // Sécurité: Ne tenter le cache que si le texte est très long pour éviter l'erreur "minimum token count not met" (~32k tokens)
-  const fullText = systemPrompt + jobDescription + criteria;
+  const finalSystemPrompt = systemPrompt
+    .replace("{{JOB_DESCRIPTION}}", jobDescription)
+    .replace("{{CRITERIA}}", criteria || "Aucun critère particulier spécifié.");
+
+  const fullText = finalSystemPrompt + jobDescription + criteria;
+  // Le caching Gemini nécessite un volume minimal de ~32k tokens (~130 000 caractères)
   if (fullText.length < 130000) {
     return null; // Trop court pour le caching
   }
@@ -21,30 +25,33 @@ function createGeminiCache(apiKey, model, systemPrompt, jobDescription, criteria
       role: "user",
       parts: [
         { text: "Contexte de l'offre d'emploi :\n" + jobDescription },
-        { text: "Critères :\n" + criteria }
+        { text: "Critères :\n" + (criteria || "Aucun critère particulier spécifié.") }
       ]
     }],
     systemInstruction: {
-      parts: [{ text: systemPrompt }]
+      parts: [{ text: finalSystemPrompt }]
     },
     ttl: "1800s" // 30 minutes
   };
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/cachedContents?key=${apiKey}`;
+  const url = "https://generativelanguage.googleapis.com/v1beta/cachedContents";
   const options = {
     method: "post",
     contentType: "application/json",
+    headers: { "x-goog-api-key": apiKey },
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
   };
 
-  const response = UrlFetchApp.fetch(url, options);
-  if (response.getResponseCode() === 200) {
-    const json = JSON.parse(response.getContentText());
-    return json.name; // Retourne le nom du cache (ex: "cachedContents/xxx")
+  try {
+    const response = UrlFetchApp.fetch(url, options);
+    if (response.getResponseCode() === 200) {
+      const json = JSON.parse(response.getContentText());
+      return json.name;
+    }
+  } catch (e) {
+    Logger.log("Info: Le cache n'a pas pu être créé. " + e.message);
   }
-  
-  Logger.log("Info: Le cache n'a pas pu être créé (peut-être texte trop court). Code: " + response.getResponseCode());
   return null;
 }
 
@@ -80,7 +87,7 @@ function extractJobDescriptionWithGemini(rawText, apiKey, model) {
 }
 
 /**
- * Lit et prépare un fichier Drive pour l'envoi à Gemini (I/O, non parallélisable, doit rester séquentiel).
+ * Lit et prépare un fichier Drive pour l'envoi à Gemini (supporte les PDF jusqu'à 20 Mo).
  * @returns {{file, mimeType, base64Data}}
  */
 function _prepareDocumentEntry(file) {
@@ -92,22 +99,18 @@ function _prepareDocumentEntry(file) {
     throw new Error(`Le fichier "${file.getName()}" est vide (0 octet).`);
   }
 
-  // Ajouter une estimation de tokens (1 token ≈ 4 caractères pour du texte)
-  const estimatedTokens = fileSizeBytes / 4;
-  if (estimatedTokens > MAX_TOTAL_TOKENS_PER_REQUEST) {
-    throw new Error(`Le fichier "${file.getName()}" est trop grand en tokens (${Math.round(estimatedTokens)}). Max: ${MAX_TOTAL_TOKENS_PER_REQUEST}.`);
-  }
-
   let blob, mimeType;
   try {
     blob = file.getBlob();
     mimeType = file.getMimeType();
-    if (mimeType === MimeType.GOOGLE_DOCS || (mimeType !== MimeType.PDF && mimeType !== "application/vnd.openxmlformats-officedocument.wordprocessingml.document")) {
+    
+    // Conversion en PDF si Google Docs ou DOCX/Word
+    if (mimeType === MimeType.GOOGLE_DOCS || mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || mimeType === "application/msword") {
       blob = blob.getAs(MimeType.PDF);
       mimeType = MimeType.PDF;
     }
   } catch (e) {
-    throw new Error(`Impossible de lire le fichier "${file.getName()}". Il est peut-être protégé. Détail : ${e.message}`);
+    throw new Error(`Impossible de lire ou convertir "${file.getName()}". Détail : ${e.message}`);
   }
 
   return { file, mimeType, base64Data: Utilities.base64Encode(blob.getBytes()) };
@@ -124,7 +127,11 @@ const DOCUMENT_RESPONSE_SCHEMA = {
     skills: { type: "STRING", description: "Les 3 compétences clés pour le poste avec 'Oui', 'Non', ou 'Partiel'." },
     strengths: { type: "STRING", description: "Points forts pour le poste en texte fluide." },
     weaknesses: { type: "STRING", description: "Points faibles ou questions à creuser en texte fluide." },
-    recommendation: { type: "STRING", description: "Strictement l'une de ces 3 valeurs : 'À contacter' (uniquement si le profil correspond très bien au poste avec une note >= 4/5 et mérite un entretien), 'À garder en vivier' (profil intéressant mais compétences partielles ou note <= 3), 'À refuser' (profil non adapté ou note <= 2)." },
+    recommendation: { 
+      type: "STRING", 
+      enum: ["À contacter", "À garder en vivier", "À refuser"],
+      description: "Strictement l'une de ces 3 valeurs : 'À contacter' (uniquement si le profil correspond très bien au poste avec note >= 4/5 et mérite un entretien), 'À garder en vivier' (profil intéressant mais compétences partielles ou note <= 3), 'À refuser' (profil non adapté ou note <= 2)." 
+    },
     score: { type: "INTEGER", description: "Note sur 5 basée sur l'adéquation au poste (5: Excellent, 4: Très bon / À contacter, 3: Moyen / Vivier, 2: Faible, 1: Inadéquat)." }
   },
   required: ["candidateName", "email", "phone", "experience", "education", "skills", "strengths", "weaknesses", "recommendation", "score"]
@@ -163,7 +170,7 @@ function _extractGeminiText(responseText) {
   throw new Error("L'API Gemini n'a pas renvoyé de résultat valide.");
 }
 
-/** Analyse un seul document (conservé pour analyzeSingleCV, comportement inchangé). */
+/** Analyse un seul document. */
 function analyzeSingleDocument(file, apiKey, model, jobDescription, criteria, systemPrompt, cacheName) {
   const entry = _prepareDocumentEntry(file);
   const payload = _buildDocumentPayload(entry, jobDescription, criteria, systemPrompt, cacheName);
@@ -173,21 +180,18 @@ function analyzeSingleDocument(file, apiKey, model, jobDescription, criteria, sy
 
 /**
  * Analyse un lot de documents en parallèle via fetchAll.
- * Les échecs 429 individuels sont retentés en solo (callGeminiAPI gère déjà le backoff exponentiel).
+ * Les échecs 429 individuels sont retentés en solo avec backoff exponentiel.
  * @returns {Array<{file, analysis, error}>}
  */
 function analyzeDocumentsBatch(files, apiKey, model, jobDescription, criteria, systemPrompt, cacheName) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   const entries = [];
   const prepErrors = [];
   
-  // Calculer la taille totale estimée du batch
-  let totalEstimatedTokens = 0;
   for (const file of files) {
     try {
       const entry = _prepareDocumentEntry(file);
-      totalEstimatedTokens += entry.base64Data.length / 4; // Estimation grossière
       entries.push(entry);
     } catch (e) {
       prepErrors.push({ file, error: e.message });
@@ -198,22 +202,20 @@ function analyzeDocumentsBatch(files, apiKey, model, jobDescription, criteria, s
     return prepErrors;
   }
 
-  // Diviser en sous-batches si trop gros
-  const avgTokensPerFile = totalEstimatedTokens / entries.length;
-  const SUB_BATCH_SIZE = Math.max(1, Math.floor(MAX_BATCH_TOKENS / avgTokensPerFile));
-  
+  // Diviser en sous-lots de 3 à 5 requêtes parallèles max pour respecter les quotas
+  const SUB_BATCH_SIZE = Math.min(5, entries.length);
   const subBatches = [];
   for (let i = 0; i < entries.length; i += SUB_BATCH_SIZE) {
     subBatches.push(entries.slice(i, i + SUB_BATCH_SIZE));
   }
 
-  // Traiter chaque sous-batch séquentiellement
   const results = [...prepErrors];
   for (const subBatch of subBatches) {
     const requests = subBatch.map(entry => ({
       url,
       method: "post",
       contentType: "application/json",
+      headers: { "x-goog-api-key": apiKey },
       payload: JSON.stringify(_buildDocumentPayload(entry, jobDescription, criteria, systemPrompt, cacheName)),
       muteHttpExceptions: true
     }));
@@ -248,7 +250,6 @@ function analyzeDocumentsBatch(files, apiKey, model, jobDescription, criteria, s
       }
     });
 
-    // Pause entre les sous-batches pour éviter le rate limiting (sauf pour le dernier)
     if (subBatches.length > 1) {
       Utilities.sleep(1000);
     }
@@ -261,10 +262,14 @@ function analyzeDocumentsBatch(files, apiKey, model, jobDescription, criteria, s
 function deleteGeminiCache(cacheName, apiKey) {
   if (!cacheName) return;
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/${cacheName}?key=${apiKey}`;
-    UrlFetchApp.fetch(url, { method: "delete", muteHttpExceptions: true });
+    const url = `https://generativelanguage.googleapis.com/v1beta/${cacheName}`;
+    UrlFetchApp.fetch(url, { 
+      method: "delete", 
+      headers: { "x-goog-api-key": apiKey },
+      muteHttpExceptions: true 
+    });
   } catch (e) {
-    Logger.log("Info : échec de la suppression explicite du cache (il expirera via son TTL de toute façon). " + e.message);
+    Logger.log("Info : échec de la suppression explicite du cache. " + e.message);
   }
 }
 
@@ -298,22 +303,25 @@ function generateSessionSynthesis(candidatesSummary, jobDescription, apiKey, mod
 
 /**
  * Fonction d'appel à l'API Gemini avec gestion des tentatives et du délai d'attente (limites de requêtes HTTP 429).
+ * Utilise l'en-tête sécurisé x-goog-api-key.
  */
 function callGeminiAPI(model, payload, apiKey) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-  // Masquer la clé API dans les logs
   const maskedApiKey = apiKey ? `${apiKey.substring(0, 6)}...` : "non définie";
   Logger.log(`Appel API Gemini avec modèle: ${model}, clé: ${maskedApiKey}`);
 
   const options = {
     method: "post",
     contentType: "application/json",
+    headers: {
+      "x-goog-api-key": apiKey
+    },
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
   };
 
-  const maxRetries = 5; // Augmenté pour la robustesse
+  const maxRetries = 5;
   let delay = 2500;
   let lastError = null;
 
@@ -326,7 +334,6 @@ function callGeminiAPI(model, payload, apiKey) {
       return text;
     }
 
-    // Gérer les erreurs 500/503 comme les 429
     if (code === 429 || code === 500 || code === 503) {
       Logger.log(`API Gemini (${code}) - Tentative ${attempt + 1}/${maxRetries}. Attente: ${delay}ms`);
       Utilities.sleep(delay);
@@ -354,7 +361,6 @@ function callGeminiAPI(model, payload, apiKey) {
     }
 
     lastError = errorMsg;
-    // Break the loop for other errors (client errors)
     break;
   }
 

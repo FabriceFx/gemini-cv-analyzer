@@ -30,10 +30,19 @@ function onOpen() {
 }
 
 /**
- * Initialise et met en forme les onglets "Configuration" et "Résultats de l'Analyse".
+ * Initialise et met en forme les onglets "Configuration" et "Résultats de l'analyse".
  */
 function setupSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+
+  // Confirmation explicite avant réinitialisation
+  const confirm = ui.alert(
+    "⚠️ Réinitialisation des feuilles",
+    "Cette action va initialiser ou réinitialiser la structure des feuilles Configuration et Résultats de l'analyse.\n\nSouhaitez-vous continuer ?",
+    ui.ButtonSet.YES_NO
+  );
+  if (confirm !== ui.Button.YES) return;
 
   // === 1. Feuille de configuration ===
   let configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
@@ -72,14 +81,14 @@ function setupSheets() {
   const apiKeyStatus = storedKey ? '✅ Clé configurée en sécurité (menu → Configurer la clé API)' : '⚠️ Non configurée — utilisez le menu → Configurer la clé API';
 
   const configData = [
-    ["Clé API Gemini", apiKeyStatus, "La clé est stockée de façon sécurisée (hors de cette feuille). Utilisez le menu '🔑 Configurer la clé API' pour la modifier."],
+    ["Clé API Gemini", apiKeyStatus, "La clé est stockée dans les propriétés sécurisées du script. Utilisez le menu '🔑 Configurer la clé API' pour la modifier."],
     ["URL du dossier Drive contenant les CVs", existingConfig['URL du dossier Drive contenant les CVs'] !== undefined ? existingConfig['URL du dossier Drive contenant les CVs'] : "", "Lien du dossier Google Drive contenant les CVs PDF/DOCX"],
     ["URL ou texte de l'annonce", existingConfig["URL ou texte de l'annonce"] !== undefined ? existingConfig["URL ou texte de l'annonce"] : "", "Entrez l'URL de l'offre d'emploi ou collez directement la description textuelle"],
     ["Modèle Gemini", existingConfig['Modèle Gemini'] || "gemini-3.7-flash", "Sélectionnez le modèle d'IA (gemini-3.7-flash est recommandé)"],
-    ["Type de compte Gemini", existingConfig['Type de compte Gemini'] || "Gratuit (Free tier)", "Passez en mode 'Payant' pour analyser beaucoup plus vite (vérifiez votre palier RPM dans Google AI Studio)"],
+    ["Type de compte Gemini", existingConfig['Type de compte Gemini'] || "Gratuit (Free tier)", "Mode Payant (Pay-as-you-go) recommandé pour garantir la stricte confidentialité des données candidat et un traitement rapide."],
     ["Critères spécifiques du recruteur", existingConfig['Critères spécifiques du recruteur'] !== undefined ? existingConfig['Critères spécifiques du recruteur'] : "", "Ex: 'Priorité aux compétences React, être bilingue anglais' (optionnel)"],
     ["Prompt système", existingConfig['Prompt système'] || DEFAULT_PROMPT, "Le prompt système utilisé pour l'analyse. Laissez {{JOB_DESCRIPTION}} et {{CRITERIA}} intacts."],
-    ["Délai de rétention RGPD (jours)", existingConfig['Délai de rétention RGPD (jours)'] !== undefined ? existingConfig['Délai de rétention RGPD (jours)'] : 730, "Les CV plus anciens seront supprimés et anonymisés (Ex: 730 pour 2 ans)"],
+    ["Délai de rétention RGPD (jours)", existingConfig['Délai de rétention RGPD (jours)'] !== undefined ? existingConfig['Délai de rétention RGPD (jours)'] : 730, "Les CV plus anciens seront supprimés du Drive et leurs lignes pseudonymisées (Ex: 730 pour 2 ans)"],
     ["Domaines autorisés", existingConfig['Domaines autorisés'] !== undefined ? existingConfig['Domaines autorisés'] : DEFAULT_ALLOWED_DOMAINS.join(", "), "Liste des sites web autorisés séparés par des virgules pour récupérer le texte des annonces."]
   ];
 
@@ -191,7 +200,7 @@ function setupSheets() {
 
   resultsSheet.setColumnWidth(1, 150);
   resultsSheet.setColumnWidth(2, 180);
-  resultsSheet.setColumnWidth(3, 120);
+  resultsSheet.setColumnWidth(3, 130);
   resultsSheet.setColumnWidth(4, 220);
   resultsSheet.setColumnWidth(5, 200);
   resultsSheet.setColumnWidth(6, 220);
@@ -207,7 +216,10 @@ function setupSheets() {
   resultsSheet.getRange("A3:M1000").applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, true, false);
 
   resultsSheet.getRange("A4:A").setVerticalAlignment("top").setWrap(true).setFontFamily("Inter").setFontWeight("bold").setFontColor(primaryColor);
-  resultsSheet.getRange("B4:H").setVerticalAlignment("top").setWrap(true).setFontFamily("Inter").setFontSize(10).setFontColor(textDark);
+  resultsSheet.getRange("B4:B").setVerticalAlignment("top").setWrap(true).setFontFamily("Inter").setFontSize(10).setFontColor(textDark);
+  // Format texte obligatoire pour la colonne C (Téléphone) afin de préserver le zéro initial
+  resultsSheet.getRange("C4:C").setNumberFormat("@").setVerticalAlignment("top").setWrap(true).setFontFamily("Inter").setFontSize(10).setFontColor(textDark);
+  resultsSheet.getRange("D4:H").setVerticalAlignment("top").setWrap(true).setFontFamily("Inter").setFontSize(10).setFontColor(textDark);
   resultsSheet.getRange("I4:J").setHorizontalAlignment("center").setVerticalAlignment("middle").setFontWeight("bold").setFontFamily("Inter");
   resultsSheet.getRange("K4:L").setHorizontalAlignment("center").setVerticalAlignment("middle").setFontFamily("Inter").setFontColor(textMuted);
 
@@ -215,24 +227,16 @@ function setupSheets() {
   const ruleGreen = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo("À contacter").setBackground("#dcfce7").setFontColor("#166534").setRanges([recommendationRange]).build();
   const ruleYellow = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo("À garder en vivier").setBackground("#fef9c3").setFontColor("#854d0e").setRanges([recommendationRange]).build();
   const ruleRed = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo("À refuser").setBackground("#fee2e2").setFontColor("#991b1b").setRanges([recommendationRange]).build();
+  const ruleError = SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo("Erreur").setBackground("#fef2f2").setFontColor("#dc2626").setRanges([recommendationRange]).build();
 
   const noteRange = resultsSheet.getRange("J4:J");
   const ruleNoteGreen = SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThanOrEqualTo(4).setBackground("#dcfce7").setFontColor("#166534").setRanges([noteRange]).build();
   const ruleNoteYellow = SpreadsheetApp.newConditionalFormatRule().whenNumberEqualTo(3).setBackground("#fef9c3").setFontColor("#854d0e").setRanges([noteRange]).build();
-  const ruleNoteRed = SpreadsheetApp.newConditionalFormatRule().whenNumberLessThanOrEqualTo(2).setBackground("#fee2e2").setFontColor("#991b1b").setRanges([noteRange]).build();
+  const ruleNoteRed = SpreadsheetApp.newConditionalFormatRule().whenNumberBetween(1, 2).setBackground("#fee2e2").setFontColor("#991b1b").setRanges([noteRange]).build();
 
   const rules = resultsSheet.getConditionalFormatRules();
-  rules.push(ruleGreen, ruleYellow, ruleRed, ruleNoteGreen, ruleNoteYellow, ruleNoteRed);
+  rules.push(ruleGreen, ruleYellow, ruleRed, ruleError, ruleNoteGreen, ruleNoteYellow, ruleNoteRed);
   resultsSheet.setConditionalFormatRules(rules);
-
-  // Supprimer les autres feuilles éventuelles
-  const sheets = ss.getSheets();
-  for (let i = 0; i < sheets.length; i++) {
-    const sheetName = sheets[i].getName();
-    if (sheetName !== CONFIG_SHEET_NAME && sheetName !== RESULTS_SHEET_NAME && sheetName !== RGPD_LOG_SHEET_NAME) {
-      ss.deleteSheet(sheets[i]);
-    }
-  }
 
   ss.toast("Feuilles configurées avec succès.", "✅ Initialisation réussie");
 }
@@ -261,6 +265,7 @@ function showGuide() {
         p { margin-top: 0; margin-bottom: 16px; }
         .highlight-box { background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 16px; border-radius: 6px; font-weight: 600; font-size: 15px; color: #0f172a; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         .success-box { background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 6px; font-size: 13.5px; color: #166534; display: flex; gap: 12px; align-items: flex-start; }
+        .warn-box { background-color: #fffbeb; border: 1px solid #fde68a; padding: 16px; border-radius: 6px; font-size: 13.5px; color: #92400e; display: flex; gap: 12px; align-items: flex-start; margin-bottom: 20px; }
         .icon { font-size: 18px; }
         hr { border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0; }
         .footer-btn { margin-top: 24px; text-align: right; }
@@ -269,29 +274,35 @@ function showGuide() {
       </style>
     </head>
     <body>
-      <h2>\uD83D\uDCA1 Bien organiser vos recrutements</h2>
+      <h2>💡 Bien organiser vos recrutements</h2>
       <p>Pour ne pas mélanger les candidatures et garantir l'efficacité de l'IA, adoptez ce principe simple :</p>
       
       <div class="highlight-box">
         1 Offre = 1 Dossier Drive = 1 Fichier Google Sheet
       </div>
       
-      <h3><span class="icon">\uD83D\uDCC1</span> 1. Scraping vs Copier-Coller</h3>
+      <h3><span class="icon">📁</span> 1. Scraping vs Copier-Coller</h3>
       <p>Les sites modernes (LinkedIn, Welcome To The Jungle) utilisent du JavaScript qui bloque souvent l'analyse automatique. <b>Pour des résultats optimaux, copiez-collez le texte de l'annonce manuellement dans la cellule "URL ou texte de l'annonce".</b></p>
       
-      <h3><span class="icon">\uD83D\uDEE1\uFE0F</span> 2. Conformité RGPD</h3>
-      <p>Configurez le délai de rétention dans les paramètres. Lancez la purge régulièrement : les CVs expirés seront placés dans votre corbeille Drive et leurs données d'identification (Nom, Email, Téléphone) seront <b>anonymisées</b> dans le tableur pour garder vos statistiques.</p>
+      <h3><span class="icon">🛡️</span> 2. Confidentialité & RGPD (Gratuit vs Payant)</h3>
+      <div class="warn-box">
+        <div class="icon">⚠️</div>
+        <div>
+          <strong>Politique de données Google API :</strong> En palier gratuit, Google se réserve le droit d'utiliser les requêtes pour l'entraînement. <b>Pour un usage professionnel conforme RGPD, activez le mode Payant (Pay-as-you-go)</b> dans Google AI Studio afin de garantir la non-conservation et la confidentialité stricte des CVs.
+        </div>
+      </div>
+      <p>Configurez le délai de rétention dans les paramètres. La fonction de nettoyage RGPD met à la corbeille les documents expirés et pseudonymise les colonnes d'identification (Nom, Email, Téléphone).</p>
       
-      <h3><span class="icon">\uD83D\uDE80</span> 3. Vitesse et Type de compte</h3>
-      <p>Par défaut, le script analyse 3 CVs toutes les 12s pour respecter le mode "Gratuit". Si vous passez votre projet Google AI Studio en mode payant (Pay-as-you-go), changez le réglage sur <b>Payant</b> pour traiter vos documents par lots de 15.</p>
+      <h3><span class="icon">🎯</span> 3. Prise de contact & Supervision humaine</h3>
+      <p>Le système sélectionne automatiquement les <b>10 meilleurs CVs qualifiés (note ≥ 4/5)</b> pour la prise de contact. Les emails sont créés en <b>brouillons Gmail</b> : relisez-les systématiquement avant envoi pour prévenir toute tentative d'injection de prompt.</p>
       
       <hr>
       
       <div class="success-box">
-        <div class="icon">\u2705</div>
+        <div class="icon">✅</div>
         <div>
           <strong>Avantages majeurs :</strong><br>
-          Aucun mélange de profils, conformité RGPD maîtrisée campagne par campagne, et partage facilité avec les managers métiers.
+          Aucun mélange de profils, conformité RGPD maîtrisée campagne par campagne, supervision humaine intégrale et partage facilité avec les managers métiers.
         </div>
       </div>
       
@@ -302,14 +313,14 @@ function showGuide() {
     </html>
   `;
 
-  const htmlOutput = HtmlService.createHtmlOutput(htmlContent).setWidth(600).setHeight(560);
-  SpreadsheetApp.getUi().showModalDialog(htmlOutput, '\uD83D\uDCD6 Guide d\'utilisation');
+  const htmlOutput = HtmlService.createHtmlOutput(htmlContent).setWidth(600).setHeight(580);
+  SpreadsheetApp.getUi().showModalDialog(htmlOutput, '📖 Guide d\'utilisation');
 }
 
 function showSetApiKeyDialog() {
   const currentKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY') || '';
   const isSet = currentKey.length > 0;
-  const maskedKey = isSet ? `${currentKey.substring(0, 6)}${'\u25cf'.repeat(20)}` : '';
+  const maskedKey = isSet ? `${currentKey.substring(0, 6)}${'●'.repeat(20)}` : '';
 
   const html = `<!DOCTYPE html>
 <html>
@@ -317,7 +328,6 @@ function showSetApiKeyDialog() {
   <base target="_top">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    /* Same styles as original */
     body { font-family: 'Inter', sans-serif; padding: 24px; color: #334155; font-size: 14px; margin: 0; background-color: #ffffff; }
     h2 { color: #0f172a; margin-top: 0; font-size: 18px; font-weight: 600; margin-bottom: 20px; }
     .status-banner { padding: 12px 16px; border-radius: 8px; margin-bottom: 24px; font-size: 13px; display: flex; align-items: center; gap: 10px; }
@@ -325,8 +335,8 @@ function showSetApiKeyDialog() {
     .status-banner.warn { background-color: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
     .status-banner code { background: rgba(255,255,255,0.6); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; letter-spacing: 1px; }
     label { display: block; font-weight: 600; margin-bottom: 8px; color: #1e293b; font-size: 13px; }
-    input[type=text] { width: 100%; padding: 10px 12px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; font-family: monospace; transition: all 0.2s; outline: none; }
-    input[type=text]:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
+    input[type=password] { width: 100%; padding: 10px 12px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; font-family: monospace; transition: all 0.2s; outline: none; }
+    input[type=password]:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
     .hint { font-size: 12px; color: #64748b; margin-top: 8px; line-height: 1.5; }
     .actions { display: flex; gap: 12px; margin-top: 28px; }
     .btn { padding: 10px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
@@ -341,15 +351,15 @@ function showSetApiKeyDialog() {
   </style>
 </head>
 <body>
-  <h2>\uD83D\uDD11 Sécurité de la clé API</h2>
+  <h2>🔑 Sécurité de la clé API</h2>
   <div class="status-banner ${isSet ? 'ok' : 'warn'}">
-    ${isSet ? '\u2705' : '\u26a0\ufe0f'}
+    ${isSet ? '✅' : '⚠️'}
     <div>${isSet ? `Clé actuellement protégée : <code>${maskedKey}</code>` : 'Aucune clé configurée pour le moment.'}</div>
   </div>
   <div style="margin-bottom: 20px;">
     <label for="apiKey">Nouvelle clé API</label>
     <input type="password" id="apiKey" placeholder="Collez votre clé commençant par AIza..." autocomplete="off" spellcheck="false" />
-    <p class="hint">🔒 Votre clé est enregistrée de façon chiffrée dans les propriétés système du script.</p>
+    <p class="hint">🔒 Votre clé est enregistrée dans les propriétés sécurisées du script (Script Properties).</p>
   </div>
   <div id="feedback"></div>
   <div class="actions">
@@ -376,7 +386,7 @@ function showSetApiKeyDialog() {
       if (!confirm("Supprimer la clé API ?")) return;
       google.script.run.withSuccessHandler(function() { google.script.run.updateApiKeyStatusUI(); google.script.host.close(); }).clearApiKey();
     }
-  <\/script>
+  </script>
 </body>
 </html>`;
 

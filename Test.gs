@@ -62,68 +62,94 @@ function testParseJsonSafely() {
 }
 
 /**
- * Fonction de test pour valider la logique de sélection des 10 meilleurs CVs en prise de contact.
+ * Fonction de test pour valider la logique de sélection des 10 meilleurs CVs via computeContactRecommendations.
  */
 function testContactRecommendationsLogic() {
   const mockCandidates = [
     // 12 candidats qualifiés (note 5 ou 4)
-    { name: "C1", reco: "À contacter", score: 5 },
-    { name: "C2", reco: "À contacter", score: 5 },
-    { name: "C3", reco: "À contacter", score: 5 },
-    { name: "C4", reco: "À contacter", score: 5 },
-    { name: "C5", reco: "À contacter", score: 5 },
-    { name: "C6", reco: "À contacter", score: 4 },
-    { name: "C7", reco: "À contacter", score: 4 },
-    { name: "C8", reco: "À contacter", score: 4 },
-    { name: "C9", reco: "À contacter", score: 4 },
-    { name: "C10", reco: "À contacter", score: 4 },
-    { name: "C11", reco: "À contacter", score: 4 },
-    { name: "C12", reco: "À contacter", score: 4 },
+    { name: "C1", recommendation: "À contacter", score: 5 },
+    { name: "C2", recommendation: "À contacter", score: 5 },
+    { name: "C3", recommendation: "À contacter", score: 5 },
+    { name: "C4", recommendation: "À contacter", score: 5 },
+    { name: "C5", recommendation: "À contacter", score: 5 },
+    { name: "C6", recommendation: "À contacter", score: 4 },
+    { name: "C7", recommendation: "À contacter", score: 4 },
+    { name: "C8", recommendation: "À contacter", score: 4 },
+    { name: "C9", recommendation: "À contacter", score: 4 },
+    { name: "C10", recommendation: "À contacter", score: 4 },
+    { name: "C11", recommendation: "À contacter", score: 4 },
+    { name: "C12", recommendation: "À contacter", score: 4 },
     // 2 candidats moyens (note 3)
-    { name: "C13", reco: "À garder en vivier", score: 3 },
-    { name: "C14", reco: "À contacter", score: 3 }, // Doit basculer en vivier
+    { name: "C13", recommendation: "À garder en vivier", score: 3 },
+    { name: "C14", recommendation: "À contacter", score: 3 }, // Doit basculer en vivier
     // 2 candidats refusés (note 1-2)
-    { name: "C15", reco: "À refuser", score: 2 },
-    { name: "C16", reco: "À refuser", score: 1 }
+    { name: "C15", recommendation: "À refuser", score: 2 },
+    { name: "C16", recommendation: "À refuser", score: 1 }
   ];
 
-  let contactCount = 0;
-  const processed = mockCandidates.map(c => {
-    let reco = c.reco;
-    const score = c.score;
-    const isQualifying = (reco === "À contacter" || score >= MIN_CONTACT_SCORE) && reco !== "À refuser" && score >= 3;
+  // Appel de la vraie fonction de production
+  const newRecos = computeContactRecommendations(mockCandidates, 10, 4);
 
-    if (isQualifying && score >= MIN_CONTACT_SCORE) {
-      if (contactCount < MAX_CONTACT_CANDIDATES) {
-        reco = "À contacter";
-        contactCount++;
-      } else {
-        reco = "À garder en vivier";
-      }
-    } else if (reco === "À contacter" && score < MIN_CONTACT_SCORE) {
-      reco = score <= 2 ? "À refuser" : "À garder en vivier";
+  const contactCount = newRecos.filter(r => r === "À contacter").length;
+  if (contactCount === 10) {
+    Logger.log("✅ PASS: Exactement 10 candidats retenus en prise de contact sur les 12 qualifiés.");
+  } else {
+    Logger.log(`❌ FAIL: Attendu 10, obtenu ${contactCount}`);
+  }
+
+  if (newRecos[10] === "À garder en vivier" && newRecos[11] === "À garder en vivier") {
+    Logger.log("✅ PASS: Les 11e et 12e candidats qualifiés ont bien été basculés en vivier.");
+  } else {
+    Logger.log("❌ FAIL: Les candidats au-delà du 10e n'ont pas été basculés correctement.");
+  }
+
+  if (newRecos[13] === "À garder en vivier") {
+    Logger.log("✅ PASS: Le candidat note 3 marqué 'À contacter' a été réajusté en vivier.");
+  } else {
+    Logger.log("❌ FAIL: Le candidat note 3 n'a pas été réajusté.");
+  }
+
+  // Test avec seulement 3 candidats qualifiés
+  const sparseCandidates = [
+    { recommendation: "À contacter", score: 5 },
+    { recommendation: "À contacter", score: 4 },
+    { recommendation: "À contacter", score: 4 },
+    { recommendation: "À refuser", score: 2 },
+    { recommendation: "À refuser", score: 1 }
+  ];
+  const sparseRecos = computeContactRecommendations(sparseCandidates, 10, 4);
+  const sparseCount = sparseRecos.filter(r => r === "À contacter").length;
+  if (sparseCount === 3) {
+    Logger.log("✅ PASS: Cas < 10 qualifiés : exactement 3 candidats retenus sans repêchage artificiel.");
+  } else {
+    Logger.log(`❌ FAIL: Attendu 3, obtenu ${sparseCount}`);
+  }
+}
+
+/**
+ * Fonction de test pour valider la protection de l'Allowlist de domaines (anti-SSRF).
+ */
+function testIsDomainAllowed() {
+  const allowed = "linkedin.com, indeed.com, pole-emploi.fr, francetravail.fr";
+  const testCases = [
+    { domain: "linkedin.com", expected: true },
+    { domain: "www.linkedin.com", expected: true },
+    { domain: "jobs.indeed.com", expected: true },
+    { domain: "evil-linkedin.com", expected: false },
+    { domain: "linkedin.com.evil.com", expected: false },
+    { domain: "pole-emploi.fr", expected: true },
+    { domain: "google.com", expected: false }
+  ];
+
+  let passed = 0;
+  for (const test of testCases) {
+    const result = isDomainAllowed(test.domain, allowed);
+    if (result === test.expected) {
+      passed++;
+      Logger.log(`✅ PASS: ${test.domain} -> ${result}`);
+    } else {
+      Logger.log(`❌ FAIL: ${test.domain} -> Expected: ${test.expected}, Got: ${result}`);
     }
-    return { name: c.name, reco, score };
-  });
-
-  const finalContact = processed.filter(c => c.reco === "À contacter");
-  if (finalContact.length === 10) {
-    Logger.log(`✅ PASS: Exactement 10 candidats retenus en prise de contact sur les 12 qualifiés.`);
-  } else {
-    Logger.log(`❌ FAIL: Attendu 10, obtenu ${finalContact.length}`);
   }
-
-  const c11 = processed.find(c => c.name === "C11");
-  if (c11 && c11.reco === "À garder en vivier") {
-    Logger.log(`✅ PASS: Le 11ème candidat qualifié a bien été basculé en vivier.`);
-  } else {
-    Logger.log(`❌ FAIL: Le 11ème candidat n'a pas été basculé.`);
-  }
-
-  const c14 = processed.find(c => c.name === "C14");
-  if (c14 && c14.reco === "À garder en vivier") {
-    Logger.log(`✅ PASS: Le candidat note 3 marqué 'À contacter' a été réajusté en vivier.`);
-  } else {
-    Logger.log(`❌ FAIL: Le candidat note 3 n'a pas été réajusté.`);
-  }
+  Logger.log(`Tests domaines terminés: ${passed}/${testCases.length} réussis.`);
 }

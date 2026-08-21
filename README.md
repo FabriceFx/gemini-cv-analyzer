@@ -8,7 +8,7 @@
 
 **Un assistant de recrutement intelligent sur Google Sheets utilisant l'API Gemini.**
 
-Cet outil utilise l'API Gemini pour analyser automatiquement des CVs au format PDF et DOCX déposés dans un dossier Google Drive, en les comparant à une offre d'emploi. Il évalue l'adéquation des profils, extrait les coordonnées, propose les meilleurs profils en prise de contact (Top 10 max qualifiés) et rédige automatiquement les brouillons d'emails de réponse. L'architecture est modularisée en 10 fichiers pour une excellente maintenabilité.
+Cet outil utilise l'API Gemini pour analyser automatiquement des CVs (PDF, Google Docs et DOCX) déposés dans un dossier Google Drive, en les comparant à une offre d'emploi. Il évalue l'adéquation des profils, extrait les coordonnées, sélectionne les meilleurs profils en prise de contact (Top 10 max qualifiés avec note ≥ 4/5) et rédige automatiquement les brouillons d'emails de réponse. L'architecture est modularisée en 10 fichiers pour une excellente maintenabilité.
 
 ### 🚀 Guide d'installation et configuration
 
@@ -20,7 +20,7 @@ Cet outil utilise l'API Gemini pour analyser automatiquement des CVs au format P
 2. Cela ouvre l'interface de développement de Google Apps Script liée à votre feuille de calcul.
 
 #### Étape 3 : copier les fichiers `.gs`
-Le code source est organisé en plusieurs fichiers `.gs` :
+Le code source est organisé en 10 fichiers `.gs` :
 - `Constants.gs`, `Config.gs`, `DriveService.gs`, `EmailService.gs`, `GeminiClient.gs`, `Main.gs`, `RGPD.gs`, `Test.gs`, `UI.gs`, `Utils.gs`.
 1. Dans l'éditeur Apps Script, créez un nouveau script pour chacun de ces fichiers (icône **+** > **Script**).
 2. Copiez-collez le code de chaque fichier correspondant depuis ce dépôt GitHub vers votre éditeur.
@@ -38,31 +38,32 @@ Le code source est organisé en plusieurs fichiers `.gs` :
 2. Après quelques secondes, un nouveau menu nommé **`🚀 Analyseur de CV`** apparaît à droite du menu "Aide".
 3. Cliquez sur **`🚀 Analyseur de CV`** > **`⚙️ Initialiser / Réinitialiser les feuilles`**.
 4. Autorisez l'exécution du script via les fenêtres d'avertissement Google (cliquez sur "Paramètres avancés" > "Accéder au projet (non sécurisé)").
-5. Cliquez à nouveau sur le menu pour finaliser la mise en place. Les feuilles `Configuration`, `Résultats de l'analyse` et `Journal RGPD` vont être générées.
+5. Confirmez la boîte de dialogue pour finaliser la mise en place. Les feuilles `Configuration`, `Résultats de l'analyse` et `Journal RGPD` vont être générées.
 
 ### 🛠️ Fonctionnalités et utilisation quotidienne
 
 1. **Clé API Gemini** : 
    - Rendez-vous sur [Google AI Studio](https://aistudio.google.com/app/apikey) et connectez-vous avec votre compte Google.
-   - Cliquez sur **"Create API Key"** (Créer une clé API) et créez-la dans un nouveau projet.
-   - Copiez la clé générée (elle commence souvent par `AIza...`).
-   - De retour dans Google Sheets, utilisez le menu **`🚀 Analyseur de CV`** > **`🔑 Configurer la clé API`** pour l'enregistrer de façon sécurisée (elle n'est pas affichée dans la feuille).
-2. **Dossier de CVs** : Collez l'URL de partage de votre dossier Google Drive (contenant les PDF et DOCX) dans la cellule **B4**.
+   - Cliquez sur **"Create API Key"** (Créer une clé API) et créez-la dans un projet (Payant recommandé pour la stricte confidentialité des données RH).
+   - Copiez la clé générée.
+   - De retour dans Google Sheets, utilisez le menu **`🚀 Analyseur de CV`** > **`🔑 Configurer la clé API`** pour l'enregistrer de façon sécurisée dans `Script Properties` (elle n'est pas affichée dans la feuille).
+2. **Dossier de CVs** : Collez l'URL de partage de votre dossier Google Drive (contenant les PDF, DOCX et Google Docs) dans la cellule **B4**.
 3. **Annonce** : Collez le texte de l'annonce ou son URL dans la cellule **B5**. 
-   - *Sécurité (SSRF) :* Le système vérifie que le domaine fait partie des **Domaines autorisés** (définis dans la configuration). Si l'URL est bloquée ou s'il s'agit d'un site complexe (LinkedIn), copiez-collez manuellement le texte.
+   - *Protection (SSRF) :* Le système vérifie que le domaine fait partie des **Domaines autorisés** configurés. Si l'URL est bloquée (ex: LinkedIn protégé contre le scraping), copiez-collez directement le texte.
 4. **Modèle** : Sélectionnez `gemini-3.7-flash` (par défaut) pour le meilleur compromis rapidité, qualité de raisonnement et coût.
 5. **Traitements** :
-   * **Scanner le dossier** : Lancez l'analyse groupée depuis le menu pour tous les nouveaux CVs. Les documents sont automatiquement divisés en sous-lots optimisés.
+   * **Scanner le dossier** : Lancez l'analyse groupée depuis le menu pour tous les nouveaux CVs.
    * **Test rapide** : Utilisez le menu "Analyser un seul CV" en fournissant l'URL d'un seul document.
    * **Prise de contact sélective (Top 10)** : L'algorithme trie les candidatures et propose en statut « À contacter » uniquement les meilleurs profils qualifiés (note ≥ 4/5, plafonné à 10 profils maximum, ou moins s'il y a moins de profils pertinents).
-   * **Automatisation** : Activez l'analyse quotidienne depuis le menu pour recevoir un e-mail avec les résultats générés automatiquement chaque nuit.
+   * **Automatisation** : Activez l'analyse quotidienne depuis le menu pour recevoir un e-mail avec les résultats générés automatiquement chaque nuit à 02h00.
 
-### ✨ Sécurité, Conformité RGPD & Outils Avancés
+### ✨ Sécurité, Conformité RGPD & Éthique de l'IA
 
-* **Robustesse** : Le système gère intelligemment les erreurs serveur de l'API (Retry sur HTTP 500/503), parse le JSON de façon hautement sécurisée (ignorant les balises Markdown) et valide les emails générés.
-* **Nettoyage RGPD** : Paramétrez votre délai de rétention. Le menu `🛡️ Nettoyage RGPD` placera les documents expirés dans la corbeille Drive et anonymisera les lignes dans le tableur ("Nom", "Email", "Téléphone") tout en générant un log d'audit dans `Journal RGPD`.
-* **Context Caching** : Pour l'analyse de gros volumes de CV avec de longues descriptions de poste, l'outil utilise nativement le Context Caching de Gemini, réduisant considérablement vos coûts d'API.
-* **Génération de brouillons** : Le script prépare dans votre boîte Gmail des e-mails hautement personnalisés pour inviter en entretien les candidats retenus (Top 10) ou refuser poliment les profils non retenus.
+* **Confidentialité des données RH (Gratuit vs Payant)** : En palier gratuit, Google peut utiliser les requêtes pour l'entraînement de ses modèles. **Pour un usage professionnel en conformité RGPD, utilisez un compte Payant (Pay-as-you-go)** dans Google AI Studio afin de garantir la non-conservation et la stricte confidentialité des CVs traités.
+* **Non-discrimination & Biais** : Le prompt système intègre une directive formelle de non-discrimination ordonnant à l'IA d'ignorer toute donnée d'âge, genre, photo, adresse postale ou nationalité, pour se concentrer uniquement sur les compétences objectives.
+* **Supervision humaine & Protection contre l'injection de prompt** : Les emails sont générés en tant que **brouillons Gmail non envoyés**. L'humain reste toujours décisionnaire final avant tout envoi.
+* **Nettoyage RGPD & Pseudonymisation** : Paramétrez votre délai de rétention. Le menu `🛡️ Nettoyage RGPD` met à la corbeille Drive les documents expirés et pseudonymise les colonnes d'identification (Nom, Email, Téléphone) dans le tableur.
+* **En-tête API sécurisé** : Les appels API utilisent l'en-tête `x-goog-api-key` pour éliminer tout risque d'exposition de token dans les URLs ou les logs d'exécution.
 
 ---
 
@@ -70,6 +71,12 @@ Le code source est organisé en plusieurs fichiers `.gs` :
 
 **An AI-powered recruitment assistant built on Google Sheets using the Gemini API.**
 
-This tool uses the Gemini API (defaulting to `gemini-3.7-flash`) to automatically analyze PDF and DOCX resumes placed in a Google Drive folder, comparing them to a job description. It evaluates candidate fit, extracts contact information, selects up to the top 10 qualified candidates for contact interviews, and automatically drafts personalized response emails. The codebase is modularized into 10 files for easy maintenance.
+This tool uses the Gemini API (defaulting to `gemini-3.7-flash`) to automatically analyze PDF, DOCX, and Google Docs resumes placed in a Google Drive folder, comparing them to a job description. It evaluates candidate fit, extracts contact information, selects up to the top 10 qualified candidates (score ≥ 4/5) for contact interviews, and automatically drafts personalized response emails in Gmail. The codebase is modularized into 10 files for easy maintenance.
+
+### Key Highlights:
+- **Enterprise-ready Privacy**: Recommends Paid (Pay-as-you-go) Gemini API for confidential data handling complying with GDPR.
+- **Fair & Objective AI**: Enforces anti-bias / non-discrimination directives in system prompts.
+- **Human in the loop**: All emails are prepared as Gmail drafts to ensure review and protect against adversarial prompt injections in CVs.
+- **Selective Contact Top 10**: Caps active interview suggestions to the top 10 qualified profiles without artificial promotion.
 
 *(Please refer to the French documentation above for setup instructions, translating the steps via your preferred tool. The interface inside the Google Sheet is generated in French).*
