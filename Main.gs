@@ -16,7 +16,15 @@ function analyzeCVsAutomated() {
  */
 function _resumeAnalysisTrigger() {
   _cleanupContinuationTriggers();
-  _runAnalysis({ interactive: false, isContinuation: true, source: 'sidebar' });
+  let savedSource = 'automated';
+  const rawState = PropertiesService.getScriptProperties().getProperty(PROP_KEY_JOB_STATE);
+  if (rawState) {
+    try {
+      const parsed = JSON.parse(rawState);
+      if (parsed && parsed.source) savedSource = parsed.source;
+    } catch (e) { }
+  }
+  _runAnalysis({ interactive: false, isContinuation: true, source: savedSource });
 }
 
 function _notifyAutomatedFailure(reason) {
@@ -197,6 +205,7 @@ function _runAnalysis(options) {
     // Mise à jour de l'état initial dans PropertiesService
     _updateProgressState({
       status: "RUNNING",
+      source: source,
       total: totalFilesCount,
       processed: alreadyProcessedCount,
       successCount: 0,

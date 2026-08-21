@@ -153,30 +153,39 @@ function saveSidebarConfig(formData) {
  */
 function startAnalysisFromSidebar(formData) {
   try {
-    // 1. Sauvegarder d'abord la configuration soumise par l'utilisateur
+    // 1. Vérifier si une analyse n'est pas déjà en cours avant toute opération
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(0)) {
+      return { ok: false, message: "Une analyse est déjà en cours d'exécution. Veuillez patienter." };
+    }
+    lock.releaseLock();
+
+    // 2. Sauvegarder d'abord la configuration soumise par l'utilisateur
     if (formData) {
       const saveRes = saveSidebarConfig(formData);
       if (!saveRes.ok) return saveRes;
     }
 
-    // 2. Vérifier la clé API
+    // 3. Vérifier la clé API
     const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
     if (!apiKey) {
       return { ok: false, message: "Clé API non configurée. Utilisez le menu pour configurer votre clé." };
     }
 
-    // 3. Initialiser l'état du job
+    // 4. Initialiser l'état du job avec réinitialisation propre des erreurs
     _updateProgressState({
       status: "RUNNING",
+      source: "sidebar",
       total: 0,
       processed: 0,
       successCount: 0,
       errorCount: 0,
-      currentFileName: "Démarrage du traitement en arrière-plan...",
+      errorMessage: "",
+      currentFileName: "Démarrage programmé (le délai dépend des serveurs Google)...",
       recentCandidates: []
     });
 
-    // 4. Lancement asynchrone via déclencheur à +1 seconde (libère immédiatement le client)
+    // 5. Lancement asynchrone via déclencheur à +1 seconde (libère immédiatement le client)
     _scheduleImmediateAnalysisTrigger();
 
     return { ok: true, message: "Analyse démarrée avec succès." };
@@ -190,11 +199,10 @@ function startAnalysisFromSidebar(formData) {
 }
 
 /**
- * Programme un déclencheur d'exécution quasi-immédiat (+1 seconde).
+ * Programme un déclencheur d'exécution quasi-immédiat (+1 seconde) sans écraser d'autres handlers.
  * @private
  */
 function _scheduleImmediateAnalysisTrigger() {
-  _cleanupContinuationTriggers();
   ScriptApp.newTrigger(CONTINUATION_TRIGGER_HANDLER)
     .timeBased()
     .after(1000)

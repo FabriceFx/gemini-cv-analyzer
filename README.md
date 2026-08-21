@@ -8,7 +8,7 @@
 
 **Un assistant de recrutement intelligent sur Google Sheets utilisant l'API Gemini.**
 
-Cet outil utilise l'API Gemini pour analyser automatiquement des CVs (PDF, Google Docs et DOCX) déposés dans un dossier Google Drive, en les comparant à une offre d'emploi. Il évalue l'adéquation des profils, extrait les coordonnées, sélectionne les meilleurs profils en prise de contact (Top 10 max qualifiés avec note ≥ 4/5) et rédige automatiquement les brouillons d'emails de réponse. L'architecture est modularisée en 11 fichiers pour une excellente maintenabilité.
+Cet outil utilise l'API Gemini pour analyser automatiquement des CVs (PDF, Google Docs et DOCX) déposés dans un dossier Google Drive, en les comparant à une offre d'emploi. Il évalue l'adéquation des profils, extrait les coordonnées, sélectionne les meilleurs profils en prise de contact (Top 10 max qualifiés avec note ≥ 4/5) et rédige automatiquement les brouillons d'emails de réponse. L'architecture est modularisée en 12 fichiers (11 scripts `.gs` et 1 fichier `.html`) pour une excellente maintenabilité.
 
 ### 🚀 Guide d'installation et configuration
 
@@ -20,8 +20,8 @@ Cet outil utilise l'API Gemini pour analyser automatiquement des CVs (PDF, Googl
 2. Cela ouvre l'interface de développement de Google Apps Script liée à votre feuille de calcul.
 
 #### Étape 3 : copier les fichiers `.gs` et `.html`
-Le code source est organisé en 11 fichiers :
-- **Fichiers Script (`.gs`)** : `Constants.gs`, `DriveService.gs`, `EmailService.gs`, `GeminiClient.gs`, `Main.gs`, `RGPD.gs`, `SidebarController.gs`, `Test.gs`, `UI.gs`, `Utils.gs`.
+Le code source est organisé en 12 fichiers :
+- **Fichiers Script (`.gs`)** : `Config.gs`, `Constants.gs`, `DriveService.gs`, `EmailService.gs`, `GeminiClient.gs`, `Main.gs`, `RGPD.gs`, `SidebarController.gs`, `Test.gs`, `UI.gs`, `Utils.gs`.
 - **Fichier HTML (`.html`)** : `Sidebar.html` *(créé via **+** > **HTML** dans l'éditeur)*.
 
 1. Dans l'éditeur Apps Script, créez un nouveau script pour chacun des fichiers `.gs` (icône **+** > **Script**).
@@ -81,7 +81,7 @@ Le code source est organisé en 11 fichiers :
 
 **An AI-powered recruitment assistant built on Google Sheets using the Gemini API.**
 
-This tool uses the Gemini API (defaulting to `gemini-3.7-flash`) to automatically analyze PDF, DOCX, and Google Docs resumes placed in a Google Drive folder, comparing them to a job description. It evaluates candidate fit, extracts contact information, selects up to the top 10 qualified candidates (score ≥ 4/5) for contact interviews, and automatically drafts personalized response emails in Gmail. The codebase is modularized into 11 files (10 `.gs` scripts and 1 `.html` file) for easy maintenance.
+This tool uses the Gemini API (defaulting to `gemini-3.7-flash`) to automatically analyze PDF, DOCX, and Google Docs resumes placed in a Google Drive folder, comparing them to a job description. It evaluates candidate fit, extracts contact information, selects up to the top 10 qualified candidates (score ≥ 4/5) for contact interviews, and automatically drafts personalized response emails in Gmail. The codebase is modularized into 12 files (11 `.gs` scripts and 1 `.html` file) for easy maintenance.
 
 ### Key Highlights:
 - **Interactive Control Sidebar**: Material Design 3 sidebar with real-time progress bar, live polling, form configuration, and rich candidate profile cards with prompt-injection-safe DOM rendering.

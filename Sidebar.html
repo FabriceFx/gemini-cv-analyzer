@@ -458,7 +458,6 @@
   <script>
     let pollingInterval = null;
     let currentCandidateRow = null;
-    let activeTabName = 'tabConfig';
 
     window.addEventListener('DOMContentLoaded', () => {
       loadInitialData();
@@ -472,7 +471,6 @@
     }
 
     function switchTab(tabId) {
-      activeTabName = tabId;
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
 
@@ -705,8 +703,8 @@
         .withSuccessHandler(state => {
           updateJobDisplay(state);
           if (state) {
-            // Détection état périmé (> 8 min sans mise à jour)
-            if (state.status === 'RUNNING' && state.lastUpdated && (Date.now() - state.lastUpdated > 8 * 60 * 1000)) {
+            // Détection état périmé (> 15 min sans mise à jour)
+            if (state.status === 'RUNNING' && state.lastUpdated && (Date.now() - state.lastUpdated > 15 * 60 * 1000)) {
               state.status = 'ERROR';
               state.errorMessage = 'Traitement interrompu (délai dépassé)';
               updateJobDisplay(state);
@@ -714,7 +712,7 @@
               return;
             }
 
-            if (state.status === 'COMPLETED' || state.status === 'ERROR' || state.status === 'IDLE') {
+            if (state.status === 'COMPLETED' || state.status === 'ERROR' || state.status === 'IDLE' || state.status === 'BUSY') {
               stopPolling();
               if (state.status === 'COMPLETED') {
                 showToast("Analyse terminée avec succès !", "success");
@@ -722,6 +720,8 @@
                 refreshCandidatesOnly();
               } else if (state.status === 'ERROR') {
                 showToast("Analyse interrompue : " + (state.errorMessage || "Erreur inconnue"), "error");
+              } else if (state.status === 'BUSY') {
+                showToast(state.errorMessage || "Une analyse est déjà en cours d'exécution.", "info");
               }
             }
           }
@@ -775,6 +775,12 @@
         stepLbl.textContent = 'Reprise automatique (+1 min)...';
         bar.className = 'progress-bar';
         continuationNotice.style.display = 'block';
+      } else if (state.status === 'BUSY') {
+        pill.className = 'status-pill warn';
+        pill.textContent = 'Occupé';
+        stepLbl.textContent = state.errorMessage || 'Une analyse est déjà en cours ailleurs';
+        bar.className = 'progress-bar';
+        continuationNotice.style.display = 'none';
       } else if (state.status === 'COMPLETED') {
         pill.className = 'status-pill ready';
         pill.textContent = 'Terminé';

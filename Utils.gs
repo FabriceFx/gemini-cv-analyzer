@@ -188,6 +188,7 @@ function mergeJobState(existing, updates, now) {
 
   return {
     status: patch.status !== undefined ? patch.status : (current.status || "IDLE"),
+    source: patch.source !== undefined ? patch.source : (current.source || "interactive"),
     total: patch.total !== undefined ? Number(patch.total) : (Number(current.total) || 0),
     processed: patch.processed !== undefined ? Number(patch.processed) : (Number(current.processed) || 0),
     successCount: patch.successCount !== undefined ? Number(patch.successCount) : (Number(current.successCount) || 0),
