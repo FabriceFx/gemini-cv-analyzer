@@ -58,7 +58,10 @@ function _runAnalysis(options) {
       if (rawState) {
         try {
           const parsed = JSON.parse(rawState);
-          if (parsed && (parsed.status === 'RUNNING' || parsed.status === 'CONTINUING') && (Date.now() - (parsed.lastUpdated || 0) < 15 * 60 * 1000)) {
+          const elapsed = Date.now() - (parsed.lastUpdated || 0);
+          const isRunning = (parsed.status === 'RUNNING' || parsed.status === 'CONTINUING') && elapsed < 15 * 60 * 1000;
+          const isScheduled = parsed.status === 'SCHEDULED' && elapsed < 3 * 60 * 1000;
+          if (isRunning || isScheduled) {
             isAlreadyRunning = true;
           }
         } catch (e) { }

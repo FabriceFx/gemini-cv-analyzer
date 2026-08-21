@@ -384,6 +384,12 @@
       <div id="continuationNotice" class="toast info" style="display: none;">
         ⏳ <strong>Reprise automatique :</strong> Temps limite approché. Le traitement se poursuit automatiquement au lot suivant (+1 min).
       </div>
+
+      <div style="text-align: right; margin-top: 6px;">
+        <button type="button" class="btn btn-secondary" style="width: auto; display: inline-flex; font-size: 10.5px; padding: 4px 8px; margin-top: 0;" onclick="resetStateManually()" title="Débloquer l'état en cas d'interruption sans affecter les données du classeur">
+          🔄 Débloquer / Réinitialiser l'état
+        </button>
+      </div>
     </div>
 
     <div class="card">
@@ -508,7 +514,7 @@
 
           // État du job
           updateJobDisplay(data.jobState);
-          if (data.jobState && (data.jobState.status === 'RUNNING' || data.jobState.status === 'CONTINUING')) {
+          if (data.jobState && (data.jobState.status === 'SCHEDULED' || data.jobState.status === 'RUNNING' || data.jobState.status === 'CONTINUING')) {
             switchTab('tabProgress');
             startPolling();
           }
@@ -763,7 +769,13 @@
       statProcessed.textContent = `${state.processed || 0} / ${state.total || 0}`;
       statTopContact.textContent = state.topContactCount || 0;
 
-      if (state.status === 'RUNNING') {
+      if (state.status === 'SCHEDULED') {
+        pill.className = 'status-pill warn';
+        pill.textContent = 'Programmé';
+        stepLbl.textContent = state.currentFileName || 'Démarrage programmé...';
+        bar.className = 'progress-bar animated';
+        continuationNotice.style.display = 'none';
+      } else if (state.status === 'RUNNING') {
         pill.className = 'status-pill busy';
         pill.textContent = 'En cours...';
         stepLbl.textContent = state.currentFileName ? `Analyse : ${state.currentFileName}` : 'Traitement en cours...';
@@ -802,6 +814,24 @@
         bar.className = 'progress-bar';
         continuationNotice.style.display = 'none';
       }
+    }
+
+    function resetStateManually() {
+      google.script.run
+        .withSuccessHandler(res => {
+          if (res && res.ok) {
+            showToast(res.message, "success");
+            stopPolling();
+            loadInitialData();
+          } else {
+            showToast(res ? res.message : "Erreur réinitialisation", "error");
+          }
+        })
+        .withFailureHandler(err => {
+          showToast("Erreur : " + err.message, "error");
+        })
+        .resetJobProgressState();
+    }
 
       // Rendu 100% sécurisé de la liste des candidats récents (sans innerHTML)
       if (state.recentCandidates && state.recentCandidates.length > 0) {

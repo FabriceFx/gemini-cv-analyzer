@@ -165,7 +165,10 @@ function startAnalysisFromSidebar(formData) {
     if (rawState) {
       try {
         const parsed = JSON.parse(rawState);
-        if (parsed && (parsed.status === "RUNNING" || parsed.status === "CONTINUING") && (Date.now() - (parsed.lastUpdated || 0) < 15 * 60 * 1000)) {
+        const elapsed = Date.now() - (parsed.lastUpdated || 0);
+        const isRunning = (parsed.status === "RUNNING" || parsed.status === "CONTINUING") && elapsed < 15 * 60 * 1000;
+        const isScheduled = parsed.status === "SCHEDULED" && elapsed < 3 * 60 * 1000;
+        if (isRunning || isScheduled) {
           return { ok: false, message: "Une analyse est déjà en cours d'exécution. Veuillez patienter." };
         }
       } catch (e) { }
@@ -183,9 +186,9 @@ function startAnalysisFromSidebar(formData) {
       return { ok: false, message: "Clé API non configurée. Utilisez le menu pour configurer votre clé." };
     }
 
-    // 4. Initialiser l'état du job avec réinitialisation propre des erreurs
+    // 4. Initialiser l'état du job en statut SCHEDULED
     _updateProgressState({
-      status: "RUNNING",
+      status: "SCHEDULED",
       source: "sidebar",
       total: 0,
       processed: 0,
@@ -199,13 +202,38 @@ function startAnalysisFromSidebar(formData) {
     // 5. Lancement asynchrone via déclencheur à +1 seconde (libère immédiatement le client)
     _scheduleImmediateAnalysisTrigger();
 
-    return { ok: true, message: "Analyse démarrée avec succès." };
+    return { ok: true, message: "Analyse programmée avec succès." };
   } catch (e) {
     _updateProgressState({
       status: "ERROR",
       errorMessage: e.message
     });
     return { ok: false, message: e.message };
+  }
+}
+
+/**
+ * Réinitialise manuellement l'état du traitement à IDLE sans impacter les données du classeur.
+ * @returns {{ok: boolean, message: string}}
+ */
+function resetJobProgressState() {
+  try {
+    _cleanupContinuationTriggers();
+    _updateProgressState({
+      status: "IDLE",
+      source: "sidebar",
+      total: 0,
+      processed: 0,
+      successCount: 0,
+      errorCount: 0,
+      topContactCount: 0,
+      errorMessage: "",
+      currentFileName: "",
+      recentCandidates: []
+    });
+    return { ok: true, message: "État réinitialisé avec succès." };
+  } catch (e) {
+    return { ok: false, message: "Erreur réinitialisation : " + e.message };
   }
 }
 
