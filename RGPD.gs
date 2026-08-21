@@ -9,42 +9,22 @@
  */
 function purgeOldCVs() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
   const resultsSheet = ss.getSheetByName(RESULTS_SHEET_NAME);
 
-  if (!configSheet || !resultsSheet) {
-    SpreadsheetApp.getUi().alert("Erreur : veuillez d'abord initialiser les feuilles via le menu '⚙️ Initialiser / Réinitialiser les feuilles'.");
+  if (!resultsSheet) {
+    SpreadsheetApp.getUi().alert("Erreur : veuillez d'abord initialiser la feuille via le menu '⚙️ Initialiser / Réinitialiser les feuilles'.");
     return;
   }
 
-  const config = getConfig(configSheet);
-  const folderUrl = (config['URL du dossier Drive contenant les CVs'] || '').toString().trim();
+  const config = getConfig();
+  const folderUrl = (config.folderUrl || config['URL du dossier Drive contenant les CVs'] || '').toString().trim();
 
   if (!folderUrl) {
     SpreadsheetApp.getUi().alert("Configuration manquante : l'URL du dossier Drive n'est pas renseignée.");
     return;
   }
 
-  const data = configSheet.getRange("A:B").getValues();
-  let retentionDays = 730; // 2 ans par défaut
-  let foundConfig = false;
-
-  for (let i = 0; i < data.length; i++) {
-    if (data[i][0] === "Délai de rétention RGPD (jours)") {
-      retentionDays = parseInt(data[i][1], 10);
-      foundConfig = true;
-      break;
-    }
-  }
-
-  if (!foundConfig) {
-    const response = SpreadsheetApp.getUi().alert(
-      "Mise à jour requise",
-      "Le paramètre RGPD n'a pas été trouvé. Souhaitez-vous utiliser la valeur par défaut de 730 jours (2 ans) ?",
-      SpreadsheetApp.getUi().ButtonSet.YES_NO
-    );
-    if (response !== SpreadsheetApp.getUi().Button.YES) return;
-  }
+  const retentionDays = Number(config.retentionDays || config['Délai de rétention RGPD (jours)']) || 730;
 
   if (isNaN(retentionDays) || retentionDays <= 0) {
     SpreadsheetApp.getUi().alert("Nettoyage désactivé : le délai de rétention est à 0 ou invalide.");

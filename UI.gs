@@ -32,7 +32,8 @@ function onOpen() {
 }
 
 /**
- * Initialise et met en forme les onglets "Configuration" et "Résultats de l'analyse".
+ * Initialise et met en forme les 2 onglets du classeur ("Résultats de l'analyse" et "Journal RGPD").
+ * Supprime proprement l'ancienne feuille "Configuration" après avoir migré ses réglages vers DocumentProperties.
  */
 function setupSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -41,131 +42,29 @@ function setupSheets() {
   // Confirmation explicite avant réinitialisation
   const confirm = ui.alert(
     "⚠️ Attention : Réinitialisation des feuilles",
-    "Cette action va réinitialiser la configuration ET effacer toutes les lignes de résultats d'analyse existantes.\n\nSouhaitez-vous vraiment continuer ?",
+    "Cette action va réinitialiser les onglets 'Résultats de l'analyse' et 'Journal RGPD'.\n(Vos paramètres restent conservés en mémoire dans le classeur).\n\nSouhaitez-vous continuer ?",
     ui.ButtonSet.YES_NO
   );
   if (confirm !== ui.Button.YES) return;
 
-  // === 1. Feuille de configuration ===
-  let configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
-  let existingConfig = {};
-  if (!configSheet) {
-    configSheet = ss.insertSheet(CONFIG_SHEET_NAME);
-  } else {
-    try {
-      existingConfig = getConfig(configSheet);
-    } catch (e) { }
-
-    configSheet.clear();
-    configSheet.getProtections(SpreadsheetApp.ProtectionType.SHEET).forEach(p => p.remove());
-  }
-
-  configSheet.setHiddenGridlines(true);
-
   const primaryColor = "#1e40af"; // Blue 800
-  const bgLight = "#f8fafc";      // Slate 50
   const borderGrey = "#e2e8f0";   // Slate 200
   const textDark = "#0f172a";     // Slate 900
   const textMuted = "#64748b";    // Slate 500
 
-  configSheet.getRange("A1:C1").merge().setValue("⚙️ Configuration - Analyseur de CV AI")
-    .setFontFamily("Inter")
-    .setFontSize(14)
-    .setFontWeight("bold")
-    .setFontColor("#ffffff")
-    .setBackgroundColor(primaryColor)
-    .setHorizontalAlignment("center")
-    .setVerticalAlignment("middle");
-
-  configSheet.setRowHeight(1, 50);
-
-  const storedKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-  const apiKeyStatus = storedKey ? '✅ Clé configurée en sécurité (menu → Configurer la clé API)' : '⚠️ Non configurée — utilisez le menu → Configurer la clé API';
-
-  const configData = [
-    ["Clé API Gemini", apiKeyStatus, "La clé est stockée dans les propriétés sécurisées du script. Utilisez le menu '🔑 Configurer la clé API' pour la modifier."],
-    ["URL du dossier Drive contenant les CVs", existingConfig['URL du dossier Drive contenant les CVs'] !== undefined ? existingConfig['URL du dossier Drive contenant les CVs'] : "", "Lien du dossier Google Drive contenant les CVs PDF/DOCX"],
-    ["URL ou texte de l'annonce", existingConfig["URL ou texte de l'annonce"] !== undefined ? existingConfig["URL ou texte de l'annonce"] : "", "Entrez l'URL de l'offre d'emploi ou collez directement la description textuelle"],
-    ["Modèle Gemini", existingConfig['Modèle Gemini'] || "gemini-3.7-flash", "Sélectionnez le modèle d'IA (gemini-3.7-flash est recommandé)"],
-    ["Type de compte Gemini", existingConfig['Type de compte Gemini'] || "Gratuit (Free tier)", "Mode Payant (Pay-as-you-go) recommandé pour garantir la stricte confidentialité des données candidat et un traitement rapide."],
-    ["Critères spécifiques du recruteur", existingConfig['Critères spécifiques du recruteur'] !== undefined ? existingConfig['Critères spécifiques du recruteur'] : "", "Ex: 'Priorité aux compétences React, être bilingue anglais' (optionnel)"],
-    ["Prompt système", existingConfig['Prompt système'] || DEFAULT_PROMPT, "Le prompt système utilisé pour l'analyse. Laissez {{JOB_DESCRIPTION}} et {{CRITERIA}} intacts."],
-    ["Délai de rétention RGPD (jours)", existingConfig['Délai de rétention RGPD (jours)'] !== undefined ? existingConfig['Délai de rétention RGPD (jours)'] : 730, "Les CV plus anciens seront supprimés du Drive et leurs lignes pseudonymisées (Ex: 730 pour 2 ans)"],
-    ["Domaines autorisés", existingConfig['Domaines autorisés'] !== undefined ? existingConfig['Domaines autorisés'] : DEFAULT_ALLOWED_DOMAINS.join(", "), "Liste des sites web autorisés séparés par des virgules pour récupérer le texte des annonces."]
-  ];
-
-  configSheet.getRange("A2:C100").setBackgroundColor(bgLight);
-
-  for (let i = 0; i < configData.length; i++) {
-    const row = i + 3;
-    configSheet.getRange(row, 1)
-      .setValue(configData[i][0])
-      .setFontWeight("bold")
-      .setFontColor(textDark)
-      .setFontFamily("Inter")
-      .setVerticalAlignment("middle")
-      .setBackgroundColor("#ffffff")
-      .setBorder(true, true, true, true, false, false, borderGrey, SpreadsheetApp.BorderStyle.SOLID);
-
-    configSheet.getRange(row, 2)
-      .setValue(configData[i][1])
-      .setFontFamily("Inter")
-      .setFontColor(textDark)
-      .setVerticalAlignment("middle")
-      .setBackgroundColor("#ffffff")
-      .setBorder(true, true, true, true, false, false, borderGrey, SpreadsheetApp.BorderStyle.SOLID);
-
-    configSheet.getRange(row, 3)
-      .setValue(configData[i][2])
-      .setFontColor(textMuted)
-      .setFontStyle("italic")
-      .setFontFamily("Inter")
-      .setVerticalAlignment("middle");
-
-    configSheet.setRowHeight(row, 35);
+  // === 1. Migration et suppression de l'ancienne feuille Configuration si présente ===
+  const legacyConfigSheet = ss.getSheetByName(LEGACY_CONFIG_SHEET_NAME);
+  if (legacyConfigSheet) {
+    _migrateLegacyConfigSheet(PropertiesService.getDocumentProperties());
+    if (ss.getSheets().length > 1) {
+      ss.deleteSheet(legacyConfigSheet);
+    }
   }
-
-  configSheet.setRowHeight(8, 70);
-  configSheet.setRowHeight(9, 140);
-  configSheet.setRowHeight(10, 70);
-
-  const inputCells = configSheet.getRange("B3:B11");
-  inputCells.setWrap(true).setFontSize(11);
-
-  const modelCell = configSheet.getRange("B6");
-  const rule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(AVAILABLE_MODELS, true)
-    .setAllowInvalid(true)
-    .build();
-  modelCell.setDataValidation(rule);
-
-  const accountTypeCell = configSheet.getRange("B7");
-  const ruleAccount = SpreadsheetApp.newDataValidation()
-    .requireValueInList(["Gratuit (Free tier)", "Payant (Pay-as-you-go)"], true)
-    .setAllowInvalid(true)
-    .build();
-  accountTypeCell.setDataValidation(ruleAccount);
-
-  const apiStatusCell = configSheet.getRange("B3");
-  const rulesConfig = configSheet.getConditionalFormatRules();
-  rulesConfig.push(SpreadsheetApp.newConditionalFormatRule().whenTextStartsWith("✅").setBackground("#dcfce7").setFontColor("#166534").setRanges([apiStatusCell]).build());
-  rulesConfig.push(SpreadsheetApp.newConditionalFormatRule().whenTextStartsWith("⚠️").setBackground("#fff7ed").setFontColor("#ea580c").setRanges([apiStatusCell]).build());
-  configSheet.setConditionalFormatRules(rulesConfig);
-
-  try {
-    const protection = configSheet.protect().setDescription("Protection interface config");
-    protection.setWarningOnly(false);
-    protection.setUnprotectedRanges([inputCells]);
-  } catch (e) { }
-
-  configSheet.setColumnWidth(1, 280);
-  configSheet.setColumnWidth(2, 500);
-  configSheet.setColumnWidth(3, 350);
 
   // === 2. Feuille des résultats ===
   let resultsSheet = ss.getSheetByName(RESULTS_SHEET_NAME);
   if (!resultsSheet) {
-    resultsSheet = ss.insertSheet(RESULTS_SHEET_NAME);
+    resultsSheet = ss.insertSheet(RESULTS_SHEET_NAME, 0);
   } else {
     resultsSheet.clear();
     resultsSheet.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(p => p.remove());
@@ -240,17 +139,12 @@ function setupSheets() {
   rules.push(ruleGreen, ruleYellow, ruleRed, ruleError, ruleNoteGreen, ruleNoteYellow, ruleNoteRed);
   resultsSheet.setConditionalFormatRules(rules);
 
-  ss.toast("Feuilles configurées avec succès.", "✅ Initialisation réussie");
+  ss.setActiveSheet(resultsSheet);
+  ss.toast("Classeur initialisé avec succès (2 onglets : Résultats & Journal RGPD).", "✅ Initialisation réussie");
 }
 
 function updateApiKeyStatusUI() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
-  if (!configSheet) return;
-
-  const storedKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-  const apiKeyStatus = storedKey ? '✅ Clé configurée en sécurité (menu → Configurer la clé API)' : '⚠️ Non configurée — utilisez le menu → Configurer la clé API';
-  configSheet.getRange("B3").setValue(apiKeyStatus);
+  // Fonction conservée pour rétrocompatibilité d'appels de dialogs
 }
 
 function showGuide() {

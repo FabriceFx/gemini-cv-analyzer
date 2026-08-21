@@ -78,11 +78,10 @@ function _runAnalysis(options) {
 
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
     const resultsSheet = ss.getSheetByName(RESULTS_SHEET_NAME);
 
-    if (!configSheet || !resultsSheet) {
-      const errMsg = "Les feuilles Configuration et Résultats sont introuvables.";
+    if (!resultsSheet) {
+      const errMsg = "La feuille Résultats de l'analyse est introuvable.";
       if (canUseUi) {
         SpreadsheetApp.getUi().alert("Erreur : veuillez d'abord initialiser les feuilles via le menu '⚙️ Initialiser / Réinitialiser les feuilles'.");
       } else if (notifyByEmail) {
@@ -97,7 +96,7 @@ function _runAnalysis(options) {
 
     let commonConfig;
     try {
-      commonConfig = _prepareCommonConfig(configSheet, canUseUi);
+      commonConfig = _prepareCommonConfig(canUseUi);
     } catch (e) {
       if (canUseUi) {
         SpreadsheetApp.getUi().alert(`Configuration requise : ${e.message}`);
@@ -494,16 +493,15 @@ function analyzeSingleCV() {
     }
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
     const resultsSheet = ss.getSheetByName(RESULTS_SHEET_NAME);
 
-    if (!configSheet || !resultsSheet) {
-      ui.alert("Veuillez initialiser les feuilles."); return;
+    if (!resultsSheet) {
+      ui.alert("Veuillez d'abord initialiser la feuille de résultats."); return;
     }
 
     let commonConfig;
     try {
-      commonConfig = _prepareCommonConfig(configSheet, true);
+      commonConfig = _prepareCommonConfig(true);
     } catch (e) {
       ui.alert(`Configuration incomplète : ${e.message}`);
       return;
@@ -747,36 +745,35 @@ function _scheduleWatchdogTrigger() {
 
 /**
  * Prépare la configuration et valide les paramètres communs.
- * @param {GoogleAppsScript.Spreadsheet.Sheet} configSheet
  * @param {boolean} canUseUi
  * @returns {{apiKey: string, jobDescription: string, model: string, criteria: string, systemPrompt: string, config: Object}}
  */
-function _prepareCommonConfig(configSheet, canUseUi) {
-  const config = getConfig(configSheet);
+function _prepareCommonConfig(canUseUi) {
+  const config = getConfig();
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-  const annonceInput = (config["URL ou texte de l'annonce"] || '').toString().trim();
-  const model = (config['Modèle Gemini'] || 'gemini-3.7-flash').toString().trim();
-  const criteria = (config['Critères spécifiques du recruteur'] || '').toString().trim();
-  const rawSystemPrompt = (config['Prompt système'] || '').toString().trim();
+  const annonceInput = (config.jobDescription || config["URL ou texte de l'annonce"] || '').toString().trim();
+  const model = (config.model || config['Modèle Gemini'] || 'gemini-3.7-flash').toString().trim();
+  const criteria = (config.criteria || config['Critères spécifiques du recruteur'] || '').toString().trim();
+  const rawSystemPrompt = (config.systemPrompt || config['Prompt système'] || '').toString().trim();
 
   if (!apiKey) {
-    throw new Error("Clé API manquante.");
+    throw new Error("Clé API manquante. Utilisez le menu '🔑 Configurer la clé API'.");
   }
   if (!annonceInput) {
-    throw new Error("URL ou texte de l'annonce manquant.");
+    throw new Error("URL ou texte de l'annonce manquant dans la configuration.");
   }
 
   let jobDescription = annonceInput;
   if (annonceInput.startsWith("http://") || annonceInput.startsWith("https://")) {
     if (canUseUi) SpreadsheetApp.getActiveSpreadsheet().toast("Chargement de l'annonce...", "Annonce 📄");
-    const allowedDomainsStr = (config['Domaines autorisés'] || DEFAULT_ALLOWED_DOMAINS.join(", ")).toString().trim();
+    const allowedDomainsStr = (config.allowedDomains || config['Domaines autorisés'] || DEFAULT_ALLOWED_DOMAINS.join(", ")).toString().trim();
     jobDescription = extractJobDescriptionWithGemini(fetchJobDescription(annonceInput, allowedDomainsStr), apiKey, model);
   }
 
   let systemPrompt = DEFAULT_PROMPT;
   if (rawSystemPrompt.includes('{{JOB_DESCRIPTION}}') && rawSystemPrompt.includes('{{CRITERIA}}')) {
     systemPrompt = rawSystemPrompt;
-  } else if (rawSystemPrompt !== "") {
+  } else if (rawSystemPrompt !== "" && rawSystemPrompt !== DEFAULT_PROMPT) {
     if (canUseUi) SpreadsheetApp.getActiveSpreadsheet().toast("Prompt personnalisé invalide. Utilisation du prompt par défaut.", "⚠️ Attention");
   }
 

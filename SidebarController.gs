@@ -20,20 +20,12 @@ function showSidebar() {
  */
 function getSidebarInitialData() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
   const resultsSheet = ss.getSheetByName(RESULTS_SHEET_NAME);
 
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY') || '';
   const isApiKeySet = apiKey.length > 0;
 
-  let config = {};
-  if (configSheet) {
-    try {
-      config = getConfig(configSheet);
-    } catch (e) {
-      Logger.log("Erreur lecture config: " + e.message);
-    }
-  }
+  const config = getConfig();
 
   // État actuel du job de traitement
   let jobState = { status: "IDLE", total: 0, processed: 0, successCount: 0, errorCount: 0 };
@@ -89,13 +81,14 @@ function getSidebarInitialData() {
   return {
     isApiKeySet: isApiKeySet,
     config: {
-      folderUrl: config['URL du dossier Drive contenant les CVs'] || '',
-      jobDescription: config["URL ou texte de l'annonce"] || '',
-      model: config['Modèle Gemini'] || 'gemini-3.7-flash',
-      accountType: config['Type de compte Gemini'] || 'Gratuit (Free tier)',
-      criteria: config['Critères spécifiques du recruteur'] || '',
-      retentionDays: config['Délai de rétention RGPD (jours)'] || 730,
-      allowedDomains: config['Domaines autorisés'] || DEFAULT_ALLOWED_DOMAINS.join(", ")
+      folderUrl: config.folderUrl || '',
+      jobDescription: config.jobDescription || '',
+      model: config.model || 'gemini-3.7-flash',
+      accountType: config.accountType || 'Gratuit (Free tier)',
+      criteria: config.criteria || '',
+      systemPrompt: config.systemPrompt || DEFAULT_PROMPT,
+      retentionDays: config.retentionDays || 730,
+      allowedDomains: config.allowedDomains || DEFAULT_ALLOWED_DOMAINS.join(", ")
     },
     availableModels: AVAILABLE_MODELS,
     jobState: jobState,
@@ -105,7 +98,7 @@ function getSidebarInitialData() {
 }
 
 /**
- * Enregistre les modifications de configuration saisies dans le formulaire de la Sidebar en écrivant par libellé en colonne A.
+ * Enregistre les modifications de configuration saisies dans le formulaire de la Sidebar directement dans DocumentProperties.
  * @param {Object} formData
  * @returns {{ok: boolean, message: string}}
  */
@@ -113,37 +106,7 @@ function saveSidebarConfig(formData) {
   if (!formData || typeof formData !== 'object') {
     return { ok: false, message: "Données de formulaire invalides." };
   }
-
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
-  if (!configSheet) {
-    setupSheets();
-    configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
-  }
-
-  try {
-    const data = configSheet.getRange("A:B").getValues();
-    const mapping = {
-      "URL du dossier Drive contenant les CVs": formData.folderUrl,
-      "URL ou texte de l'annonce": formData.jobDescription,
-      "Modèle Gemini": formData.model,
-      "Type de compte Gemini": formData.accountType,
-      "Critères spécifiques du recruteur": formData.criteria,
-      "Délai de rétention RGPD (jours)": formData.retentionDays !== undefined ? Number(formData.retentionDays) : undefined,
-      "Domaines autorisés": formData.allowedDomains
-    };
-
-    for (let i = 0; i < data.length; i++) {
-      const label = (data[i][0] || '').toString().trim();
-      if (mapping[label] !== undefined && mapping[label] !== null) {
-        configSheet.getRange(i + 1, 2).setValue(mapping[label]);
-      }
-    }
-
-    return { ok: true, message: "Configuration enregistrée avec succès." };
-  } catch (e) {
-    return { ok: false, message: "Erreur lors de la sauvegarde : " + e.message };
-  }
+  return saveConfig(formData);
 }
 
 /**
@@ -308,8 +271,7 @@ function getSelectedCandidateDetails() {
 function draftSingleCandidateEmail(rowNumber) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const resultsSheet = ss.getSheetByName(RESULTS_SHEET_NAME);
-  const configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
-  if (!resultsSheet || !configSheet) return { ok: false, message: "Feuilles introuvables." };
+  if (!resultsSheet) return { ok: false, message: "Feuille de résultats introuvable." };
 
   const candidate = _buildCandidateObjectFromRow(resultsSheet, rowNumber);
   if (!candidate || !candidate.email || !isValidEmail(candidate.email)) {
@@ -317,8 +279,8 @@ function draftSingleCandidateEmail(rowNumber) {
   }
 
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-  const config = getConfig(configSheet);
-  const model = (config['Modèle Gemini'] || 'gemini-3.7-flash').toString().trim();
+  const config = getConfig();
+  const model = (config.model || 'gemini-3.7-flash').toString().trim();
 
   if (!apiKey) return { ok: false, message: "Clé API non configurée." };
 

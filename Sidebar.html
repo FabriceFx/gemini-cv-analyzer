@@ -348,7 +348,27 @@
         </div>
       </div>
 
-      <button type="submit" id="btnLaunch" class="btn btn-primary">
+      <details class="card" style="margin-top: 8px;">
+        <summary style="font-weight: 600; font-size: 11.5px; color: var(--text-dark); cursor: pointer; outline: none; padding: 2px 0;">
+          ⚙️ Options avancées
+        </summary>
+        <div style="margin-top: 10px;">
+          <div class="form-group">
+            <label for="retentionDaysInput">Rétention RGPD (jours)</label>
+            <input type="number" id="retentionDaysInput" class="input-control" value="730" min="30" max="3650" />
+          </div>
+          <div class="form-group">
+            <label for="allowedDomainsInput">Domaines autorisés (URLs d'annonces)</label>
+            <input type="text" id="allowedDomainsInput" class="input-control" placeholder="linkedin.com, indeed.com..." />
+          </div>
+          <div class="form-group">
+            <label for="systemPromptInput">Prompt système personnalisé</label>
+            <textarea id="systemPromptInput" class="input-control" style="height: 80px; font-size: 10.5px;" placeholder="Doit contenir {{JOB_DESCRIPTION}} et {{CRITERIA}}"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <button type="submit" id="btnLaunch" class="btn btn-primary" style="margin-top: 12px;">
         <span>🚀 Lancer l'analyse</span>
       </button>
       <button type="button" class="btn btn-secondary" onclick="saveOnlyConfig()">
@@ -507,6 +527,9 @@
             document.getElementById('jobDescription').value = data.config.jobDescription || '';
             if (data.config.accountType) document.getElementById('accountTypeSelect').value = data.config.accountType;
             document.getElementById('criteriaInput').value = data.config.criteria || '';
+            document.getElementById('retentionDaysInput').value = data.config.retentionDays || 730;
+            document.getElementById('allowedDomainsInput').value = data.config.allowedDomains || '';
+            document.getElementById('systemPromptInput').value = data.config.systemPrompt || '';
           }
 
           // Remplissage sélecteur candidat
@@ -647,7 +670,10 @@
         jobDescription: document.getElementById('jobDescription').value.trim(),
         model: document.getElementById('modelSelect').value,
         accountType: document.getElementById('accountTypeSelect').value,
-        criteria: document.getElementById('criteriaInput').value.trim()
+        criteria: document.getElementById('criteriaInput').value.trim(),
+        retentionDays: Number(document.getElementById('retentionDaysInput').value) || 730,
+        allowedDomains: document.getElementById('allowedDomainsInput').value.trim(),
+        systemPrompt: document.getElementById('systemPromptInput').value.trim()
       };
     }
 

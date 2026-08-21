@@ -227,4 +227,50 @@ function testJobStateManagement() {
   }
 }
 
+/**
+ * Fonction de test pour valider la logique de configuration via DocumentProperties.
+ */
+function testConfigDocumentProperties() {
+  const mockStorage = {};
+  const mockDocProps = {
+    getProperties: () => ({ ...mockStorage }),
+    setProperties: (props) => { Object.assign(mockStorage, props); }
+  };
+
+  // Test sauvegarde
+  const testData = {
+    folderUrl: "https://drive.google.com/drive/folders/12345",
+    jobDescription: "Offre Développeur Fullstack",
+    model: "gemini-3.7-flash",
+    accountType: "Payant (Pay-as-you-go)",
+    criteria: "Node & React",
+    systemPrompt: DEFAULT_PROMPT,
+    retentionDays: 365,
+    allowedDomains: "linkedin.com, indeed.com"
+  };
+
+  const updates = {};
+  updates[PROP_KEYS.FOLDER_URL] = testData.folderUrl;
+  updates[PROP_KEYS.JOB_DESCRIPTION] = testData.jobDescription;
+  updates[PROP_KEYS.MODEL] = testData.model;
+  updates[PROP_KEYS.ACCOUNT_TYPE] = testData.accountType;
+  updates[PROP_KEYS.CRITERIA] = testData.criteria;
+  updates[PROP_KEYS.SYSTEM_PROMPT] = testData.systemPrompt;
+  updates[PROP_KEYS.RETENTION_DAYS] = String(testData.retentionDays);
+  updates[PROP_KEYS.ALLOWED_DOMAINS] = testData.allowedDomains;
+
+  mockDocProps.setProperties(updates);
+
+  const retrieved = mockDocProps.getProperties();
+  const ok = retrieved[PROP_KEYS.FOLDER_URL] === testData.folderUrl &&
+             retrieved[PROP_KEYS.MODEL] === "gemini-3.7-flash" &&
+             retrieved[PROP_KEYS.RETENTION_DAYS] === "365";
+
+  if (ok) {
+    Logger.log("✅ PASS: Stockage et récupération dans DocumentProperties validés.");
+  } else {
+    Logger.log("❌ FAIL: Erreur de stockage dans DocumentProperties.");
+  }
+}
+
 

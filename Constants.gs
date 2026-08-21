@@ -29,9 +29,21 @@
  * @property {string} [Domaines autorisés]
  */
 
-const CONFIG_SHEET_NAME = "Configuration";
 const RESULTS_SHEET_NAME = "Résultats de l'analyse";
 const RGPD_LOG_SHEET_NAME = "Journal RGPD";
+const LEGACY_CONFIG_SHEET_NAME = "Configuration"; // Pour migration automatique
+
+// Clés de configuration stockées dans DocumentProperties
+const PROP_KEYS = {
+  FOLDER_URL: "CFG_FOLDER_URL",
+  JOB_DESCRIPTION: "CFG_JOB_DESCRIPTION",
+  MODEL: "CFG_MODEL",
+  ACCOUNT_TYPE: "CFG_ACCOUNT_TYPE",
+  CRITERIA: "CFG_CRITERIA",
+  SYSTEM_PROMPT: "CFG_SYSTEM_PROMPT",
+  RETENTION_DAYS: "CFG_RETENTION_DAYS",
+  ALLOWED_DOMAINS: "CFG_ALLOWED_DOMAINS"
+};
 
 // Index des colonnes de la feuille Résultats (1-based)
 const COL_INDEX = {

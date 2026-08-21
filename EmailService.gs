@@ -52,10 +52,9 @@ function draftEmailsForCandidates() {
 
   ss.toast("Génération des brouillons en cours...", "📧 Emails", 10);
 
-  const configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
-  const config = getConfig(configSheet);
+  const config = getConfig();
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-  const model = (config['Modèle Gemini'] || 'gemini-3.7-flash').toString().trim();
+  const model = (config.model || config['Modèle Gemini'] || 'gemini-3.7-flash').toString().trim();
 
   if (!apiKey) {
     ui.alert("Veuillez configurer votre clé API Gemini pour générer les textes d'emails.");

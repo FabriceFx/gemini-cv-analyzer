@@ -41,9 +41,9 @@ Le code source est organisé en 12 fichiers :
 2. Après quelques secondes, un nouveau menu nommé **`🚀 Analyseur de CV`** apparaît à droite du menu "Aide".
 3. Cliquez sur **`🚀 Analyseur de CV`** > **`⚙️ Initialiser / Réinitialiser les feuilles`**.
 4. Autorisez l'exécution du script via les fenêtres d'avertissement Google (cliquez sur "Paramètres avancés" > "Accéder au projet (non sécurisé)").
-5. Confirmez la boîte de dialogue pour finaliser la mise en place. Les feuilles `Configuration`, `Résultats de l'analyse` et `Journal RGPD` vont être générées.
+5. Confirmez la boîte de dialogue pour finaliser la mise en place. Le classeur est configuré avec une structure épurée à **2 onglets** : `Résultats de l'analyse` et `Journal RGPD` (les paramètres de configuration sont directement stockés de manière invisible et pérenne dans les propriétés du document via la Sidebar).
 
-> **🔄 Mise à jour depuis une version antérieure :** Si vous mettez à jour un projet existant, remplacez impérativement le fichier `appsscript.json` (qui active le service avancé Drive v2 pour la conversion automatique des DOCX et le scope `scriptapp` pour les déclencheurs) et ré-autorisez le script lors du premier lancement.
+> **🔄 Mise à jour depuis une version antérieure :** Si vous mettez à jour un projet existant, remplacez impérativement le fichier `appsscript.json` (qui active le service avancé Drive v2 pour la conversion automatique des DOCX et le scope `scriptapp` pour les déclencheurs) et ré-autorisez le script lors du premier lancement. Si une ancienne feuille `Configuration` était présente, ses données sont automatiquement migrées vers `DocumentProperties` lors de l'initialisation.
 
 ### 🛠️ Fonctionnalités et utilisation quotidienne
 
@@ -52,8 +52,12 @@ Le code source est organisé en 12 fichiers :
    - Cliquez sur **"Create API Key"** (Créer une clé API) et créez-la dans un projet (Payant recommandé pour la stricte confidentialité des données RH).
    - Copiez la clé générée.
    - De retour dans Google Sheets, utilisez le menu **`🚀 Analyseur de CV`** > **`🔑 Configurer la clé API`** pour l'enregistrer de façon sécurisée dans `Script Properties` (elle n'est pas affichée dans la feuille).
-2. **Dossier de CVs** : Collez l'URL de partage de votre dossier Google Drive (contenant les PDF, DOCX et Google Docs) dans la cellule **B4** ou directement dans la Sidebar.
-3. **Annonce** : Collez le texte de l'annonce ou son URL dans la cellule **B5** ou directement dans la Sidebar. 
+2. **Panneau latéral de contrôle (Sidebar MD3)** :
+   * Ouvrez le panneau via le menu **`🚀 Analyseur de CV`** > **`📂 Ouvrir le panneau de contrôle`**.
+   * **Onglet ⚡ Lancer** : Renseignez l'URL du dossier Drive contenant vos CVs et l'annonce (texte ou URL), choisissez le modèle, personnalisez les options avancées (rétention RGPD, domaines autorisés, prompt système) et lancez l'analyse. Tous les réglages sont automatiquement sauvegardés dans le document.
+   * **Onglet 📊 Suivi** : Visualisez en direct la barre de progression, le statut d'avancement et la liste des derniers profils analysés.
+   * **Onglet 👤 Fiche Candidat** : Consultez la fiche enrichie d'un candidat (note / 5, forces, points de vigilance, extrait de compétences) via la liste déroulante ou le bouton de synchronisation **🔄**, avec accès direct au document Drive et rédaction instantanée d'un brouillon Gmail.
+3. **Annonce** : Collez le texte de l'annonce ou son URL dans le formulaire de la Sidebar.
    - *Protection (SSRF) :* Le système vérifie que le domaine fait partie des **Domaines autorisés** configurés. Si l'URL est bloquée (ex: LinkedIn protégé contre le scraping), copiez-collez directement le texte.
 4. **Modèle** : Sélectionnez `gemini-3.7-flash` (par défaut) pour le meilleur compromis rapidité, qualité de raisonnement et coût.
 5. **Panneau latéral de contrôle (Sidebar MD3)** :
