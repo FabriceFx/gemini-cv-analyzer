@@ -8,7 +8,7 @@
 
 **Un assistant de recrutement intelligent sur Google Sheets utilisant l'API Gemini.**
 
-Cet outil utilise l'API Gemini pour analyser automatiquement des CVs au format PDF et DOCX déposés dans un dossier Google Drive, en les comparant à une offre d'emploi. Il évalue l'adéquation des profils, extrait les coordonnées, et rédige automatiquement les brouillons d'emails de réponse. L'architecture a été modularisée en 10 fichiers pour une meilleure maintenabilité.
+Cet outil utilise l'API Gemini pour analyser automatiquement des CVs au format PDF et DOCX déposés dans un dossier Google Drive, en les comparant à une offre d'emploi. Il évalue l'adéquation des profils, extrait les coordonnées, propose les meilleurs profils en prise de contact (Top 10 max qualifiés) et rédige automatiquement les brouillons d'emails de réponse. L'architecture est modularisée en 10 fichiers pour une excellente maintenabilité.
 
 ### 🚀 Guide d'installation et configuration
 
@@ -50,10 +50,11 @@ Le code source est organisé en plusieurs fichiers `.gs` :
 2. **Dossier de CVs** : Collez l'URL de partage de votre dossier Google Drive (contenant les PDF et DOCX) dans la cellule **B4**.
 3. **Annonce** : Collez le texte de l'annonce ou son URL dans la cellule **B5**. 
    - *Sécurité (SSRF) :* Le système vérifie que le domaine fait partie des **Domaines autorisés** (définis dans la configuration). Si l'URL est bloquée ou s'il s'agit d'un site complexe (LinkedIn), copiez-collez manuellement le texte.
-4. **Modèle** : Sélectionnez `gemini-3.5-flash` pour le meilleur compromis rapidité/coût.
+4. **Modèle** : Sélectionnez `gemini-3.7-flash` (par défaut) pour le meilleur compromis rapidité, qualité de raisonnement et coût.
 5. **Traitements** :
    * **Scanner le dossier** : Lancez l'analyse groupée depuis le menu pour tous les nouveaux CVs. Les documents sont automatiquement divisés en sous-lots optimisés.
    * **Test rapide** : Utilisez le menu "Analyser un seul CV" en fournissant l'URL d'un seul document.
+   * **Prise de contact sélective (Top 10)** : L'algorithme trie les candidatures et propose en statut « À contacter » uniquement les meilleurs profils qualifiés (note ≥ 4/5, plafonné à 10 profils maximum, ou moins s'il y a moins de profils pertinents).
    * **Automatisation** : Activez l'analyse quotidienne depuis le menu pour recevoir un e-mail avec les résultats générés automatiquement chaque nuit.
 
 ### ✨ Sécurité, Conformité RGPD & Outils Avancés
@@ -61,7 +62,7 @@ Le code source est organisé en plusieurs fichiers `.gs` :
 * **Robustesse** : Le système gère intelligemment les erreurs serveur de l'API (Retry sur HTTP 500/503), parse le JSON de façon hautement sécurisée (ignorant les balises Markdown) et valide les emails générés.
 * **Nettoyage RGPD** : Paramétrez votre délai de rétention. Le menu `🛡️ Nettoyage RGPD` placera les documents expirés dans la corbeille Drive et anonymisera les lignes dans le tableur ("Nom", "Email", "Téléphone") tout en générant un log d'audit dans `Journal RGPD`.
 * **Context Caching** : Pour l'analyse de gros volumes de CV avec de longues descriptions de poste, l'outil utilise nativement le Context Caching de Gemini, réduisant considérablement vos coûts d'API.
-* **Génération de brouillons** : Le script peut préparer dans votre boîte Gmail des e-mails hautement personnalisés pour accepter (proposer un entretien) ou refuser poliment vos candidats, en se basant sur leurs forces et faiblesses.
+* **Génération de brouillons** : Le script prépare dans votre boîte Gmail des e-mails hautement personnalisés pour inviter en entretien les candidats retenus (Top 10) ou refuser poliment les profils non retenus.
 
 ---
 
@@ -69,6 +70,6 @@ Le code source est organisé en plusieurs fichiers `.gs` :
 
 **An AI-powered recruitment assistant built on Google Sheets using the Gemini API.**
 
-This tool uses the Gemini API to automatically analyze PDF and DOCX resumes placed in a Google Drive folder, comparing them to a job description. It evaluates candidate fit, extracts contact information, and automatically drafts response emails. The codebase has been modularized into 9 files for easier maintenance.
+This tool uses the Gemini API (defaulting to `gemini-3.7-flash`) to automatically analyze PDF and DOCX resumes placed in a Google Drive folder, comparing them to a job description. It evaluates candidate fit, extracts contact information, selects up to the top 10 qualified candidates for contact interviews, and automatically drafts personalized response emails. The codebase is modularized into 10 files for easy maintenance.
 
 *(Please refer to the French documentation above for setup instructions, translating the steps via your preferred tool. The interface inside the Google Sheet is generated in French).*

@@ -124,8 +124,8 @@ const DOCUMENT_RESPONSE_SCHEMA = {
     skills: { type: "STRING", description: "Les 3 compétences clés pour le poste avec 'Oui', 'Non', ou 'Partiel'." },
     strengths: { type: "STRING", description: "Points forts pour le poste en texte fluide." },
     weaknesses: { type: "STRING", description: "Points faibles ou questions à creuser en texte fluide." },
-    recommendation: { type: "STRING", description: "Strictement l'une de ces 3 valeurs : 'À contacter', 'À garder en vivier', 'À refuser'." },
-    score: { type: "INTEGER", description: "Note sur 5 basée sur l'adéquation au poste." }
+    recommendation: { type: "STRING", description: "Strictement l'une de ces 3 valeurs : 'À contacter' (uniquement si le profil correspond très bien au poste avec une note >= 4/5 et mérite un entretien), 'À garder en vivier' (profil intéressant mais compétences partielles ou note <= 3), 'À refuser' (profil non adapté ou note <= 2)." },
+    score: { type: "INTEGER", description: "Note sur 5 basée sur l'adéquation au poste (5: Excellent, 4: Très bon / À contacter, 3: Moyen / Vivier, 2: Faible, 1: Inadéquat)." }
   },
   required: ["candidateName", "email", "phone", "experience", "education", "skills", "strengths", "weaknesses", "recommendation", "score"]
 };

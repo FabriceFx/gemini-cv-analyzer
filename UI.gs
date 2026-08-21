@@ -75,7 +75,7 @@ function setupSheets() {
     ["Clé API Gemini", apiKeyStatus, "La clé est stockée de façon sécurisée (hors de cette feuille). Utilisez le menu '🔑 Configurer la clé API' pour la modifier."],
     ["URL du dossier Drive contenant les CVs", existingConfig['URL du dossier Drive contenant les CVs'] !== undefined ? existingConfig['URL du dossier Drive contenant les CVs'] : "", "Lien du dossier Google Drive contenant les CVs PDF/DOCX"],
     ["URL ou texte de l'annonce", existingConfig["URL ou texte de l'annonce"] !== undefined ? existingConfig["URL ou texte de l'annonce"] : "", "Entrez l'URL de l'offre d'emploi ou collez directement la description textuelle"],
-    ["Modèle Gemini", existingConfig['Modèle Gemini'] || "gemini-3.5-flash", "Sélectionnez le modèle d'IA (gemini-3.5-flash est recommandé)"],
+    ["Modèle Gemini", existingConfig['Modèle Gemini'] || "gemini-3.7-flash", "Sélectionnez le modèle d'IA (gemini-3.7-flash est recommandé)"],
     ["Type de compte Gemini", existingConfig['Type de compte Gemini'] || "Gratuit (Free tier)", "Passez en mode 'Payant' pour analyser beaucoup plus vite (vérifiez votre palier RPM dans Google AI Studio)"],
     ["Critères spécifiques du recruteur", existingConfig['Critères spécifiques du recruteur'] !== undefined ? existingConfig['Critères spécifiques du recruteur'] : "", "Ex: 'Priorité aux compétences React, être bilingue anglais' (optionnel)"],
     ["Prompt système", existingConfig['Prompt système'] || DEFAULT_PROMPT, "Le prompt système utilisé pour l'analyse. Laissez {{JOB_DESCRIPTION}} et {{CRITERIA}} intacts."],

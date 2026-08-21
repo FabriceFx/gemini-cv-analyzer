@@ -15,10 +15,10 @@ En Apps Script, on ne stocke **jamais** cette clé en clair dans le code. On uti
 ```javascript
 // Récupération sécurisée de la clé API  
 const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');  
-const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${apiKey}`;
 ```
 
-> **💡 L'astuce pédagogique :** L'endpoint utilise ici le modèle de dernière génération `gemini-3.5-flash`, extrêmement rapide et économique pour l'analyse de documents volumineux.
+> **💡 L'astuce pédagogique :** L'endpoint utilise ici le modèle de dernière génération `gemini-3.7-flash`, extrêmement rapide, intelligent et économique pour l'analyse de documents volumineux.
 
 ---
 

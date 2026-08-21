@@ -182,10 +182,12 @@ function _runAnalysis(options) {
     // Nettoyage explicite du cache Gemini (plutôt que d'attendre son TTL)
     deleteGeminiCache(cacheName, apiKey);
 
-    // Tri
+    // Tri par note décroissante
+    let topContactCount = 0;
     const finalLastRow = resultsSheet.getLastRow();
     if (finalLastRow > 3) {
       resultsSheet.getRange(4, 1, finalLastRow - 3, 13).sort({ column: 10, ascending: false });
+      topContactCount = _optimizeContactRecommendations(resultsSheet);
     }
 
     // Synthèse globale
@@ -202,7 +204,10 @@ function _runAnalysis(options) {
     }
 
     let endMessage = `Analyse terminée pour ${successCount} document${successCount > 1 ? 's' : ''}.`;
-    if (errorCount > 0) endMessage += ` ${errorCount} fichier(s) en erreur.`;
+    if (successCount > 0) {
+      endMessage += `\n🎯 ${topContactCount} profil${topContactCount > 1 ? 's retenus' : ' retenu'} pour la prise de contact (Top ${MAX_CONTACT_CANDIDATES} max qualifiés).`;
+    }
+    if (errorCount > 0) endMessage += `\n⚠️ ${errorCount} fichier(s) en erreur.`;
     if (stoppedByTimeout) endMessage += "\n\n⚠️ L'analyse a été mise en pause. Relancez pour la suite.";
     
     if (isInteractive) {
@@ -280,6 +285,9 @@ function analyzeSingleCV() {
     ss.toast("Analyse du document en cours...", "Analyse 🔍");
     try {
       const analysis = analyzeSingleDocument(file, apiKey, model, jobDescription, criteria, systemPrompt, null);
+      if (analysis.recommendation === "À contacter" && analysis.score < MIN_CONTACT_SCORE) {
+        analysis.recommendation = analysis.score <= 2 ? "À refuser" : "À garder en vivier";
+      }
       _appendAnalysisResult(resultsSheet, analysis, file);
       ui.alert(`Analyse réussie pour : ${analysis.candidateName}\nRecommandation: ${analysis.recommendation}\nNote: ${analysis.score}/5`);
     } catch (err) {
@@ -364,6 +372,61 @@ function _formatAddedRow(resultsSheet, file, isError = false) {
 }
 
 /**
+ * Harmonise les recommandations de prise de contact après analyse et tri.
+ * Ne retient en statut "À contacter" que les profils qualifiés (note >= MIN_CONTACT_SCORE),
+ * et limite ce statut aux MAX_CONTACT_CANDIDATES (10) meilleurs CVs maximum.
+ * S'il y a moins de 10 candidats qualifiés, seuls ceux-ci restent "À contacter".
+ * Les candidats au-delà du 10e sont basculés en "À garder en vivier".
+ * 
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} resultsSheet
+ * @returns {number} Nombre de candidats retenus en prise de contact
+ */
+function _optimizeContactRecommendations(resultsSheet) {
+  const lastRow = resultsSheet.getLastRow();
+  if (lastRow < 4) return 0;
+
+  const range = resultsSheet.getRange(4, 1, lastRow - 3, 13);
+  const data = range.getValues();
+  let contactCount = 0;
+  let hasChanges = false;
+
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    const reco = (row[8] || '').toString().trim(); // Colonne 9 (I) : Recommandation
+    const score = Number(row[9]) || 0;            // Colonne 10 (J) : Note / 5
+
+    // Profil éligible à la prise de contact : note suffisante (>= MIN_CONTACT_SCORE) et pas explicitement à refuser
+    const isQualifying = (reco === "À contacter" || score >= MIN_CONTACT_SCORE) && reco !== "À refuser" && score >= 3;
+
+    if (isQualifying && score >= MIN_CONTACT_SCORE) {
+      if (contactCount < MAX_CONTACT_CANDIDATES) {
+        if (row[8] !== "À contacter") {
+          row[8] = "À contacter";
+          hasChanges = true;
+        }
+        contactCount++;
+      } else {
+        // Au-delà du top 10 : bascule en vivier pour ne pas saturer la prise de contact
+        if (row[8] === "À contacter") {
+          row[8] = "À garder en vivier";
+          hasChanges = true;
+        }
+      }
+    } else if (reco === "À contacter" && score < MIN_CONTACT_SCORE) {
+      // Si la note est insuffisante pour une prise de contact active (< 4), basculer en vivier ou refuser
+      row[8] = score <= 2 ? "À refuser" : "À garder en vivier";
+      hasChanges = true;
+    }
+  }
+
+  if (hasChanges) {
+    range.setValues(data);
+  }
+
+  return contactCount;
+}
+
+/**
  * Prépare la configuration et valide les paramètres communs à analyzeCVs et analyzeSingleCV.
  * @param {GoogleAppsScript.Spreadsheet.Sheet} configSheet
  * @param {boolean} isInteractive
@@ -373,7 +436,7 @@ function _prepareCommonConfig(configSheet, isInteractive) {
   const config = getConfig(configSheet);
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
   const annonceInput = (config["URL ou texte de l'annonce"] || '').toString().trim();
-  const model = (config['Modèle Gemini'] || 'gemini-3.5-flash').toString().trim();
+  const model = (config['Modèle Gemini'] || 'gemini-3.7-flash').toString().trim();
   const criteria = (config['Critères spécifiques du recruteur'] || '').toString().trim();
   const rawSystemPrompt = (config['Prompt système'] || '').toString().trim();
 

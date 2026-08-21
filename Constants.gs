@@ -34,16 +34,21 @@ const CONFIG_SHEET_NAME = "Configuration";
 const RESULTS_SHEET_NAME = "Résultats de l'analyse";
 const RGPD_LOG_SHEET_NAME = "Journal RGPD";
 
-const DEFAULT_PROMPT = "Agis en tant que Recruteur Senior. Je te fournis l'offre d'emploi suivante :\n{{JOB_DESCRIPTION}}\n\net le CV d'un candidat. Tu ne dois rien inventer et tu ne dois faire aucune interprétation : réfère-toi uniquement aux données explicites du CV et de l'offre d'emploi.\n\nConsignes spécifiques du recruteur :\n{{CRITERIA}}\n\nConsignes de mise en forme et de logique :\nFormat du texte : N'utilise jamais de puces (points ou tirets) pour séparer les idées dans les champs texte. Privilégie des parenthèses ou du texte fluide. Pour les compétences, indique le statut général (Oui / Non / Partiel) suivi des éléments précis entre parenthèses, par exemple : 'Oui (compétence X, compétence Y)' ou 'Partiel (compétence Z)'.\n\nIntitule ton rapport : 'Analyse des CV par l'IA'.";
+const DEFAULT_PROMPT = "Agis en tant que Recruteur Senior. Je te fournis l'offre d'emploi suivante :\n{{JOB_DESCRIPTION}}\n\net le CV d'un candidat. Tu ne dois rien inventer et tu ne dois faire aucune interprétation : réfère-toi uniquement aux données explicites du CV et de l'offre d'emploi.\n\nConsignes spécifiques du recruteur :\n{{CRITERIA}}\n\nConsignes de mise en forme et de logique :\nFormat du texte : N'utilise jamais de puces (points ou tirets) pour séparer les idées dans les champs texte. Privilégie des parenthèses ou du texte fluide. Pour les compétences, indique le statut général (Oui / Non / Partiel) suivi des éléments précis entre parenthèses, par exemple : 'Oui (compétence X, compétence Y)' ou 'Partiel (compétence Z)'.\nRègle d'évaluation : Sois rigoureux et sélectif. Attribue 'À contacter' uniquement aux profils présentant une très bonne adéquation (note de 4 ou 5 sur 5) et qui méritent réellement une prise de contact. Pour les profils moyens ou avec des manques partiels, attribue 'À garder en vivier' (note de 3). Pour les profils inadaptés, attribue 'À refuser' (note de 1 ou 2).\n\nIntitule ton rapport : 'Analyse des CV par l'IA'.";
 
 // Liste des modèles Gemini supportés et recommandés
 const AVAILABLE_MODELS = [
+  "gemini-3.7-flash",
+  "gemini-3.7-pro",
   "gemini-3.5-flash",
   "gemini-3.1-flash-lite",
   "gemini-3-flash",
   "gemini-2.5-flash",
   "gemini-2.5-pro"
 ];
+
+const MAX_CONTACT_CANDIDATES = 10; // Plafond maximal de candidats proposés en prise de contact
+const MIN_CONTACT_SCORE = 4; // Note minimale (sur 5) pour une prise de contact active
 
 const MAX_EXECUTION_TIME = 5 * 60 * 1000; // 5 minutes pour éviter le timeout Google Apps Script
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB limite de Gemini API
@@ -52,7 +57,7 @@ const GEMINI_FREE_BATCH_PAUSE_MS = 12000;
 const GEMINI_PAID_BATCH_SIZE = 15;
 const GEMINI_PAID_BATCH_PAUSE_MS = 6000;
 
-const MAX_BATCH_TOKENS = 150000; // Limite estimée pour gemini-3.5-flash
+const MAX_BATCH_TOKENS = 150000; // Limite estimée par lot
 const MAX_TOTAL_TOKENS_PER_REQUEST = 200000; // Limite par requête
 
 const SUPPORTED_MIME_TYPES = [
