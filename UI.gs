@@ -8,6 +8,8 @@ function onOpen() {
   
   try {
     ui.createMenu(t('menuTitle'))
+      .addItem(t('menuSidebar'), 'showSidebar')
+      .addSeparator()
       .addItem(t('menuInit'), 'setupSheets')
       .addItem(t('menuConfig'), 'showSetApiKeyDialog')
       .addSeparator()

@@ -179,3 +179,30 @@ function testIsDomainAllowed() {
   }
   Logger.log(`Tests URLs terminés: ${urlPassed}/${urlTestCases.length} réussis.`);
 }
+
+/**
+ * Fonction de test pour valider la structure et la sérialisation de l'état de progression.
+ */
+function testJobStateManagement() {
+  const sampleState = {
+    status: "RUNNING",
+    total: 25,
+    processed: 10,
+    successCount: 9,
+    errorCount: 1,
+    currentFileName: "CV_Jean_Dupont.pdf",
+    recentCandidates: [
+      { name: "Jean Dupont", score: 4, reco: "À contacter" }
+    ],
+    lastUpdated: Date.now()
+  };
+
+  const serialized = JSON.stringify(sampleState);
+  const parsed = parseJsonSafely(serialized);
+
+  if (parsed.status === "RUNNING" && parsed.total === 25 && parsed.processed === 10 && parsed.recentCandidates.length === 1) {
+    Logger.log("✅ PASS: Gestion et sérialisation de l'état de progression validée.");
+  } else {
+    Logger.log("❌ FAIL: Échec de validation de l'état de progression.");
+  }
+}

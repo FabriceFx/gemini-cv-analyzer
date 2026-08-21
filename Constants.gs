@@ -29,7 +29,6 @@
  * @property {string} [Domaines autorisés]
  */
 
-
 const CONFIG_SHEET_NAME = "Configuration";
 const RESULTS_SHEET_NAME = "Résultats de l'analyse";
 const RGPD_LOG_SHEET_NAME = "Journal RGPD";
@@ -67,7 +66,11 @@ const AVAILABLE_MODELS = [
 const MAX_CONTACT_CANDIDATES = 10; // Plafond maximal de candidats proposés en prise de contact
 const MIN_CONTACT_SCORE = 4; // Note minimale (sur 5) pour une prise de contact active
 
-const MAX_EXECUTION_TIME = 5 * 60 * 1000; // 5 minutes pour éviter le timeout Google Apps Script
+// Gestion du temps et des reprises automatiques (contournement de la limite des 6 min)
+const MAX_EXECUTION_TIME = 4.5 * 60 * 1000; // 4 minutes 30 secondes avant de programmer la reprise
+const CONTINUATION_TRIGGER_HANDLER = "_resumeAnalysisTrigger";
+const PROP_KEY_JOB_STATE = "CV_ANALYZER_JOB_STATE";
+
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB limite de Gemini API
 const GEMINI_FREE_BATCH_SIZE = 3;
 const GEMINI_FREE_BATCH_PAUSE_MS = 12000;
@@ -98,6 +101,7 @@ const DEFAULT_ALLOWED_DOMAINS = [
 const DICTIONARY = {
   fr: {
     menuTitle: '🚀 Analyseur de CV',
+    menuSidebar: '📂 Ouvrir le panneau de contrôle',
     menuInit: '⚙️ Initialiser / réinitialiser les feuilles',
     menuConfig: '🔑 Configurer la clé API',
     menuAnalyzeAll: '🔍 Analyser les nouveaux CV (dossier complet)',
@@ -111,6 +115,7 @@ const DICTIONARY = {
   },
   en: {
     menuTitle: '🚀 CV Analyzer',
+    menuSidebar: '📂 Open control panel',
     menuInit: '⚙️ Initialize / reset sheets',
     menuConfig: '🔑 Configure API Key',
     menuAnalyzeAll: '🔍 Analyze new CVs (Full folder)',

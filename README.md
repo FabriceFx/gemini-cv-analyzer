@@ -53,11 +53,15 @@ Le code source est organisé en 10 fichiers `.gs` :
 3. **Annonce** : Collez le texte de l'annonce ou son URL dans la cellule **B5**. 
    - *Protection (SSRF) :* Le système vérifie que le domaine fait partie des **Domaines autorisés** configurés. Si l'URL est bloquée (ex: LinkedIn protégé contre le scraping), copiez-collez directement le texte.
 4. **Modèle** : Sélectionnez `gemini-3.7-flash` (par défaut) pour le meilleur compromis rapidité, qualité de raisonnement et coût.
-5. **Traitements** :
-   * **Scanner le dossier** : Lancez l'analyse groupée depuis le menu pour tous les nouveaux CVs.
-   * **Test rapide** : Utilisez le menu "Analyser un seul CV" en fournissant l'URL d'un seul document.
+5. **Panneau latéral de contrôle (Sidebar MD3)** :
+   * Ouvrez le panneau via le menu **`🚀 Analyseur de CV`** > **`📂 Ouvrir le panneau de contrôle`**.
+   * **Onglet ⚡ Lancer** : Configurez et déclenchez l'analyse directement depuis l'interface latérale sans manipuler les cellules.
+   * **Onglet 📊 Suivi** : Visualisez en direct la barre de progression, le statut d'avancement et la liste des derniers profils analysés.
+   * **Onglet 👤 Fiche Candidat** : Consultez la fiche enrichie d'un candidat (note / 5, forces, points de vigilance, extrait de compétences) au clic ou via le sélecteur, avec accès direct au document Drive et rédaction instantanée d'un brouillon Gmail.
+6. **Traitements & Reprise automatique** :
+   * **Levée de la limite des 6 minutes** : À l'approche du timeout (4m30s), le système programme automatiquement un déclencheur à +1 minute et poursuit le traitement des lots sans aucune interruption ni intervention humaine.
    * **Prise de contact sélective (Top 10)** : L'algorithme trie les candidatures et propose en statut « À contacter » uniquement les meilleurs profils qualifiés (note ≥ 4/5, plafonné à 10 profils maximum, ou moins s'il y a moins de profils pertinents).
-   * **Automatisation** : Activez l'analyse quotidienne depuis le menu pour recevoir un e-mail avec les résultats générés automatiquement chaque nuit à 02h00.
+   * **Automatisation quotidienne** : Activez l'analyse automatique pour recevoir un e-mail récapitulatif chaque nuit à 02h00.
 
 ### ✨ Sécurité, Conformité RGPD & Éthique de l'IA
 
@@ -73,9 +77,11 @@ Le code source est organisé en 10 fichiers `.gs` :
 
 **An AI-powered recruitment assistant built on Google Sheets using the Gemini API.**
 
-This tool uses the Gemini API (defaulting to `gemini-3.7-flash`) to automatically analyze PDF, DOCX, and Google Docs resumes placed in a Google Drive folder, comparing them to a job description. It evaluates candidate fit, extracts contact information, selects up to the top 10 qualified candidates (score ≥ 4/5) for contact interviews, and automatically drafts personalized response emails in Gmail. The codebase is modularized into 10 files for easy maintenance.
+This tool uses the Gemini API (defaulting to `gemini-3.7-flash`) to automatically analyze PDF, DOCX, and Google Docs resumes placed in a Google Drive folder, comparing them to a job description. It evaluates candidate fit, extracts contact information, selects up to the top 10 qualified candidates (score ≥ 4/5) for contact interviews, and automatically drafts personalized response emails in Gmail. The codebase is modularized into 11 files for easy maintenance.
 
 ### Key Highlights:
+- **Interactive Control Sidebar**: Material Design 3 sidebar with real-time progress bar, live polling, form configuration, and rich candidate profile cards.
+- **6-Minute Timeout Bypass**: Automatically schedules self-resuming triggers to process large volumes of CVs seamlessly without hitting Google Apps Script execution time limits.
 - **Enterprise-ready Privacy**: Recommends Paid (Pay-as-you-go) Gemini API for confidential data handling complying with GDPR.
 - **Fair & Objective AI**: Enforces anti-bias / non-discrimination directives in system prompts.
 - **Human in the loop**: All emails are prepared as Gmail drafts to ensure review and protect against adversarial prompt injections in CVs.

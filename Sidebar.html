@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: #eff6ff;
+      --surface: #ffffff;
+      --surface-variant: #f8fafc;
+      --border: #e2e8f0;
+      --border-focus: #3b82f6;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --success: #16a34a;
+      --success-bg: #f0fdf4;
+      --warning: #d97706;
+      --warning-bg: #fffbeb;
+      --danger: #dc2626;
+      --danger-bg: #fef2f2;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -2px rgba(0,0,0,0.05);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f1f5f9;
+      color: var(--text-main);
+      font-size: 13px;
+      line-height: 1.5;
+      padding: 12px;
+      overflow-y: auto;
+      min-height: 100vh;
+    }
+
+    /* En-tête */
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .app-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .app-logo {
+      font-size: 20px;
+      line-height: 1;
+    }
+    .app-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-main);
+      letter-spacing: -0.2px;
+    }
+    .status-pill {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .status-pill.ready { background: var(--success-bg); color: var(--success); border: 1px solid #bbf7d0; }
+    .status-pill.busy { background: var(--primary-light); color: var(--primary); border: 1px solid #bfdbfe; }
+    .status-pill.warn { background: var(--warning-bg); color: var(--warning); border: 1px solid #fde68a; }
+
+    /* Navigation par onglets */
+    .tabs-nav {
+      display: flex;
+      background: #e2e8f0;
+      border-radius: var(--radius-md);
+      padding: 3px;
+      gap: 2px;
+      margin-bottom: 14px;
+    }
+    .tab-btn {
+      flex: 1;
+      border: none;
+      background: transparent;
+      padding: 7px 4px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+    .tab-btn:hover { color: var(--text-main); }
+    .tab-btn.active {
+      background: var(--surface);
+      color: var(--primary);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Contenu des onglets */
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; animation: fadeIn 0.2s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Cartes & Groupes de formulaire */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow-sm);
+    }
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .form-group { margin-bottom: 12px; }
+    .form-group:last-child { margin-bottom: 0; }
+    label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 4px;
+    }
+    .input-control, select, textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-family: inherit;
+      color: var(--text-main);
+      background: var(--surface);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    textarea { resize: vertical; min-height: 55px; }
+    .input-control:focus, select:focus, textarea:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+    .hint-text {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    /* Boutons */
+    .btn {
+      width: 100%;
+      padding: 10px 14px;
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      font-weight: 600;
+      font-family: 'Outfit', sans-serif;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 2px 4px rgba(37, 99, 235, 0.25);
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+      box-shadow: 0 4px 8px rgba(37, 99, 235, 0.35);
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid var(--border);
+      margin-top: 8px;
+    }
+    .btn-secondary:hover:not(:disabled) { background: #e2e8f0; color: var(--text-main); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; }
+
+    /* Suivi temps réel & Barre de progression */
+    .progress-container {
+      background: #e2e8f0;
+      border-radius: 10px;
+      height: 10px;
+      overflow: hidden;
+      margin: 12px 0;
+      position: relative;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #2563eb);
+      width: 0%;
+      border-radius: 10px;
+      transition: width 0.4s ease;
+    }
+    .progress-bar.animated {
+      background: linear-gradient(90deg, #3b82f6, #60a5fa, #3b82f6);
+      background-size: 200% 100%;
+      animation: progressPulse 1.5s infinite linear;
+    }
+    @keyframes progressPulse { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 12px 0;
+    }
+    .stat-card {
+      background: var(--surface-variant);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      text-align: center;
+    }
+    .stat-val { font-size: 16px; font-weight: 700; font-family: 'Outfit', sans-serif; color: var(--text-main); }
+    .stat-lbl { font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+
+    /* Liste d'historique en direct */
+    .live-list {
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 8px;
+    }
+    .live-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      background: var(--surface-variant);
+      border-radius: var(--radius-sm);
+      margin-bottom: 4px;
+      font-size: 11.5px;
+    }
+    .badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .badge.contact { background: var(--success-bg); color: var(--success); }
+    .badge.pool { background: var(--warning-bg); color: var(--warning); }
+    .badge.reject { background: var(--danger-bg); color: var(--danger); }
+    .badge.error { background: #fef2f2; color: #dc2626; }
+
+    /* Fiche Candidat détaillée */
+    .candidate-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .candidate-name { font-size: 15px; font-weight: 700; font-family: 'Outfit', sans-serif; color: var(--text-main); }
+    .score-chip {
+      background: #eff6ff;
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 13px;
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      border: 1px solid #bfdbfe;
+    }
+    .detail-section { margin-bottom: 10px; }
+    .detail-title { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 3px; }
+    .detail-content { font-size: 12px; color: #1e293b; background: var(--surface-variant); padding: 7px 9px; border-radius: var(--radius-sm); }
+    
+    /* Feedback Alertes */
+    .toast {
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 11.5px;
+      margin-bottom: 10px;
+      display: none;
+    }
+    .toast.success { background: var(--success-bg); color: var(--success); border: 1px solid #bbf7d0; display: block; }
+    .toast.error { background: var(--danger-bg); color: var(--danger); border: 1px solid #fecaca; display: block; }
+    .toast.info { background: var(--primary-light); color: var(--primary); border: 1px solid #bfdbfe; display: block; }
+  </style>
+</head>
+<body>
+
+  <!-- En-tête -->
+  <div class="app-header">
+    <div class="app-brand">
+      <span class="app-logo">🚀</span>
+      <div class="app-title">Analyseur de CV AI</div>
+    </div>
+    <span id="headerStatusPill" class="status-pill ready">Prêt</span>
+  </div>
+
+  <!-- Toast de notification -->
+  <div id="toastMessage" class="toast"></div>
+
+  <!-- Barre d'onglets -->
+  <div class="tabs-nav">
+    <button class="tab-btn active" onclick="switchTab('tabConfig')">⚡ Lancer</button>
+    <button class="tab-btn" onclick="switchTab('tabProgress')">📊 Suivi</button>
+    <button class="tab-btn" onclick="switchTab('tabCandidate')">👤 Fiche</button>
+  </div>
+
+  <!-- Onglet 1 : Lancer & Config -->
+  <div id="tabConfig" class="tab-pane active">
+    <form id="configForm" onsubmit="event.preventDefault(); saveAndLaunch();">
+      <div class="card">
+        <div class="card-title">📁 Dossier & Offre</div>
+        <div class="form-group">
+          <label for="folderUrl">URL du dossier Drive contenant les CVs</label>
+          <input type="text" id="folderUrl" class="input-control" placeholder="https://drive.google.com/drive/folders/..." required />
+        </div>
+        <div class="form-group">
+          <label for="jobDescription">URL ou texte de l'annonce</label>
+          <textarea id="jobDescription" class="input-control" placeholder="Collez l'URL de l'annonce ou directement sa description textuelle..." required></textarea>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">⚙️ Paramètres IA</div>
+        <div class="form-group">
+          <label for="modelSelect">Modèle Gemini</label>
+          <select id="modelSelect">
+            <option value="gemini-3.7-flash">gemini-3.7-flash (Recommandé)</option>
+            <option value="gemini-3.7-pro">gemini-3.7-pro</option>
+            <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+            <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="accountTypeSelect">Type de compte Gemini</label>
+          <select id="accountTypeSelect">
+            <option value="Gratuit (Free tier)">Gratuit (Free tier - 3 CVs/12s)</option>
+            <option value="Payant (Pay-as-you-go)">Payant (Pay-as-you-go - 15 CVs/6s & Confidentialité)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="criteriaInput">Critères spécifiques du recruteur (optionnel)</label>
+          <input type="text" id="criteriaInput" class="input-control" placeholder="Ex: Expérience React 3+ ans, bilingue..." />
+        </div>
+      </div>
+
+      <button type="submit" id="btnLaunch" class="btn btn-primary">
+        <span>🚀 Lancer l'analyse intelligente</span>
+      </button>
+      <button type="button" class="btn btn-secondary" onclick="saveOnlyConfig()">
+        💾 Sauvegarder la configuration
+      </button>
+    </form>
+  </div>
+
+  <!-- Onglet 2 : Suivi en direct -->
+  <div id="tabProgress" class="tab-pane">
+    <div class="card">
+      <div class="card-title">📊 Avancement de l'analyse</div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span id="progressStepLabel" style="font-weight: 600; color: #334155;">En attente</span>
+        <span id="progressPercentage" style="font-weight: 700; color: var(--primary);">0%</span>
+      </div>
+      
+      <div class="progress-container">
+        <div id="progressBar" class="progress-bar"></div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div id="statProcessed" class="stat-val">0 / 0</div>
+          <div class="stat-lbl">Documents traités</div>
+        </div>
+        <div class="stat-card">
+          <div id="statTopContact" class="stat-val">0</div>
+          <div class="stat-lbl">À contacter (Top 10)</div>
+        </div>
+      </div>
+
+      <div id="continuationNotice" class="toast info" style="display: none;">
+        ⏳ <strong>Reprise automatique :</strong> Temps limite approché. Le traitement se poursuit automatiquement au lot suivant.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">⚡ Candidats récents analysés</div>
+      <div id="liveCandidatesList" class="live-list">
+        <div style="color: var(--text-muted); font-size: 11.5px; text-align: center; padding: 10px;">
+          Aucun document en cours de traitement.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Onglet 3 : Fiche Candidat -->
+  <div id="tabCandidate" class="tab-pane">
+    <div class="card" style="padding: 10px 12px;">
+      <label for="candidatePicker">Sélectionner un profil</label>
+      <div style="display: flex; gap: 6px;">
+        <select id="candidatePicker" onchange="loadCandidateDetails(this.value)">
+          <option value="">-- Choisir un candidat --</option>
+        </select>
+        <button type="button" class="btn btn-secondary" style="width: auto; margin-top: 0; padding: 6px 10px;" onclick="syncWithActiveRow()" title="Synchroniser avec la ligne sélectionnée dans le tableau">🔄</button>
+      </div>
+    </div>
+
+    <div id="candidateDetailsCard" class="card" style="display: none;">
+      <div class="candidate-card-header">
+        <div>
+          <div id="cardCandidateName" class="candidate-name">Candidat</div>
+          <span id="cardBadgeReco" class="badge contact" style="margin-top: 4px; display: inline-block;">À contacter</span>
+        </div>
+        <div id="cardScore" class="score-chip">5 / 5</div>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-title">📬 Coordonnées</div>
+        <div class="detail-content" id="cardContactInfo">-</div>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-title">🎯 Top 3 Compétences</div>
+        <div class="detail-content" id="cardSkills">-</div>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-title">✨ Points forts</div>
+        <div class="detail-content" id="cardStrengths" style="background: #f0fdf4; color: #166534;">-</div>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-title">⚠️ Points de vigilance / questions</div>
+        <div class="detail-content" id="cardWeaknesses" style="background: #fffbeb; color: #92400e;">-</div>
+      </div>
+
+      <div style="display: flex; gap: 8px; margin-top: 14px;">
+        <a id="cardDriveLink" href="#" target="_blank" class="btn btn-secondary" style="flex: 1; text-decoration: none; margin-top: 0;">
+          📄 Ouvrir le CV
+        </a>
+        <button type="button" id="btnDraftEmail" class="btn btn-primary" style="flex: 1.2;" onclick="draftCandidateEmail()">
+          ✉️ Brouillon Gmail
+        </button>
+      </div>
+    </div>
+
+    <div id="emptyCandidatePrompt" style="text-align: center; color: var(--text-muted); padding: 24px 12px;">
+      Cliquez sur une ligne de candidat dans la feuille de résultats ou sélectionnez-en un dans la liste ci-dessus pour afficher sa fiche complète.
+    </div>
+  </div>
+
+  <script>
+    let pollingInterval = null;
+    let currentCandidateRow = null;
+
+    // Initialisation au chargement de la Sidebar
+    window.addEventListener('DOMContentLoaded', () => {
+      loadInitialData();
+    });
+
+    function showToast(msg, type = 'info') {
+      const el = document.getElementById('toastMessage');
+      el.textContent = msg;
+      el.className = `toast ${type}`;
+      setTimeout(() => { el.style.display = 'none'; }, 4000);
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+
+      const targetBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(tabId));
+      if (targetBtn) targetBtn.classList.add('active');
+
+      const targetPane = document.getElementById(tabId);
+      if (targetPane) targetPane.classList.add('active');
+
+      if (tabId === 'tabProgress') {
+        startPolling();
+      }
+    }
+
+    function loadInitialData() {
+      google.script.run
+        .withSuccessHandler(data => {
+          if (!data) return;
+
+          // Remplissage formulaire
+          if (data.config) {
+            document.getElementById('folderUrl').value = data.config.folderUrl || '';
+            document.getElementById('jobDescription').value = data.config.jobDescription || '';
+            if (data.config.model) document.getElementById('modelSelect').value = data.config.model;
+            if (data.config.accountType) document.getElementById('accountTypeSelect').value = data.config.accountType;
+            document.getElementById('criteriaInput').value = data.config.criteria || '';
+          }
+
+          // Remplissage sélecteur candidat
+          populateCandidatePicker(data.candidatesList, data.selectedCandidate);
+
+          // État du job
+          updateJobDisplay(data.jobState);
+          if (data.jobState && (data.jobState.status === 'RUNNING' || data.jobState.status === 'CONTINUING')) {
+            switchTab('tabProgress');
+            startPolling();
+          }
+        })
+        .withFailureHandler(err => {
+          showToast("Erreur de chargement : " + err.message, "error");
+        })
+        .getSidebarInitialData();
+    }
+
+    function populateCandidatePicker(candidates, selected) {
+      const picker = document.getElementById('candidatePicker');
+      picker.innerHTML = '<option value="">-- Choisir un candidat --</option>';
+
+      if (candidates && candidates.length > 0) {
+        candidates.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.rowNumber;
+          opt.textContent = `${c.name} (${c.score}/5 - ${c.recommendation})`;
+          picker.appendChild(opt);
+        });
+      }
+
+      if (selected) {
+        picker.value = selected.rowNumber;
+        renderCandidateCard(selected);
+      }
+    }
+
+    function syncWithActiveRow() {
+      google.script.run
+        .withSuccessHandler(candidate => {
+          if (candidate) {
+            document.getElementById('candidatePicker').value = candidate.rowNumber;
+            renderCandidateCard(candidate);
+            showToast(`Fiche chargée : ${candidate.name}`, "success");
+          } else {
+            showToast("Veuillez sélectionner une ligne de candidat dans la feuille de résultats.", "info");
+          }
+        })
+        .getSelectedCandidateDetails();
+    }
+
+    function loadCandidateDetails(rowNumber) {
+      if (!rowNumber) {
+        document.getElementById('candidateDetailsCard').style.display = 'none';
+        document.getElementById('emptyCandidatePrompt').style.display = 'block';
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(candidate => {
+          if (candidate) {
+            renderCandidateCard(candidate);
+          }
+        })
+        .getCandidateDetailsByRow(Number(rowNumber));
+    }
+
+    function renderCandidateCard(candidate) {
+      currentCandidateRow = candidate.rowNumber;
+      document.getElementById('cardCandidateName').textContent = candidate.name || 'Inconnu';
+      document.getElementById('cardScore').textContent = `${candidate.score} / 5`;
+      
+      const badge = document.getElementById('cardBadgeReco');
+      badge.textContent = candidate.recommendation;
+      if (candidate.recommendation === "À contacter") badge.className = "badge contact";
+      else if (candidate.recommendation === "À refuser") badge.className = "badge reject";
+      else if (candidate.recommendation === "Erreur") badge.className = "badge error";
+      else badge.className = "badge pool";
+
+      document.getElementById('cardContactInfo').innerHTML = `<strong>Email :</strong> ${candidate.email || 'Non renseigné'}<br><strong>Téléphone :</strong> ${candidate.phone || 'Non renseigné'}`;
+      document.getElementById('cardSkills').textContent = candidate.skills || 'Non renseigné';
+      document.getElementById('cardStrengths').textContent = candidate.strengths || 'Aucun point fort mentionné';
+      document.getElementById('cardWeaknesses').textContent = candidate.weaknesses || 'Aucun point de vigilance';
+
+      const driveLink = document.getElementById('cardDriveLink');
+      if (candidate.fileUrl) {
+        driveLink.href = candidate.fileUrl;
+        driveLink.style.display = 'inline-flex';
+      } else {
+        driveLink.style.display = 'none';
+      }
+
+      document.getElementById('candidateDetailsCard').style.display = 'block';
+      document.getElementById('emptyCandidatePrompt').style.display = 'none';
+    }
+
+    function draftCandidateEmail() {
+      if (!currentCandidateRow) return;
+      const btn = document.getElementById('btnDraftEmail');
+      btn.disabled = true;
+      btn.textContent = "Rédaction...";
+
+      google.script.run
+        .withSuccessHandler(res => {
+          btn.disabled = false;
+          btn.textContent = "✉️ Brouillon Gmail";
+          if (res && res.ok) {
+            showToast(res.message, "success");
+          } else {
+            showToast(res ? res.message : "Erreur de création", "error");
+          }
+        })
+        .withFailureHandler(err => {
+          btn.disabled = false;
+          btn.textContent = "✉️ Brouillon Gmail";
+          showToast("Erreur : " + err.message, "error");
+        })
+        .draftSingleCandidateEmail(currentCandidateRow);
+    }
+
+    function getFormData() {
+      return {
+        folderUrl: document.getElementById('folderUrl').value.trim(),
+        jobDescription: document.getElementById('jobDescription').value.trim(),
+        model: document.getElementById('modelSelect').value,
+        accountType: document.getElementById('accountTypeSelect').value,
+        criteria: document.getElementById('criteriaInput').value.trim()
+      };
+    }
+
+    function saveOnlyConfig() {
+      const data = getFormData();
+      google.script.run
+        .withSuccessHandler(res => {
+          if (res && res.ok) showToast("Configuration sauvegardée dans le classeur.", "success");
+          else showToast("Erreur de sauvegarde.", "error");
+        })
+        .saveSidebarConfig(data);
+    }
+
+    function saveAndLaunch() {
+      const data = getFormData();
+      if (!data.folderUrl || !data.jobDescription) {
+        showToast("Veuillez remplir l'URL du dossier Drive et l'annonce.", "error");
+        return;
+      }
+
+      const btn = document.getElementById('btnLaunch');
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳ Démarrage...</span>';
+
+      google.script.run
+        .withSuccessHandler(res => {
+          btn.disabled = false;
+          btn.innerHTML = '<span>🚀 Lancer l\'analyse intelligente</span>';
+          if (res && res.ok) {
+            switchTab('tabProgress');
+            startPolling();
+          } else {
+            showToast(res ? res.message : "Erreur au lancement", "error");
+          }
+        })
+        .withFailureHandler(err => {
+          btn.disabled = false;
+          btn.innerHTML = '<span>🚀 Lancer l\'analyse intelligente</span>';
+          showToast("Erreur : " + err.message, "error");
+        })
+        .startAnalysisFromSidebar();
+    }
+
+    function startPolling() {
+      if (pollingInterval) clearInterval(pollingInterval);
+      pollProgress();
+      pollingInterval = setInterval(pollProgress, 2500);
+    }
+
+    function stopPolling() {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+      }
+    }
+
+    function pollProgress() {
+      google.script.run
+        .withSuccessHandler(state => {
+          updateJobDisplay(state);
+          if (state && (state.status === 'COMPLETED' || state.status === 'ERROR' || state.status === 'IDLE')) {
+            if (state.status === 'COMPLETED') {
+              showToast("Analyse terminée avec succès !", "success");
+              stopPolling();
+              loadInitialData(); // Recharger les candidats
+            } else if (state.status === 'ERROR') {
+              showToast("Analyse interrompue : " + (state.errorMessage || "Erreur inconnue"), "error");
+              stopPolling();
+            }
+          }
+        })
+        .getAnalysisProgress();
+    }
+
+    function updateJobDisplay(state) {
+      if (!state) return;
+
+      const pill = document.getElementById('headerStatusPill');
+      const stepLbl = document.getElementById('progressStepLabel');
+      const pctLbl = document.getElementById('progressPercentage');
+      const bar = document.getElementById('progressBar');
+      const statProcessed = document.getElementById('statProcessed');
+      const statTopContact = document.getElementById('statTopContact');
+      const continuationNotice = document.getElementById('continuationNotice');
+
+      let pct = 0;
+      if (state.total > 0) {
+        pct = Math.min(100, Math.round((state.processed / state.total) * 100));
+      }
+
+      pctLbl.textContent = `${pct}%`;
+      bar.style.width = `${pct}%`;
+      statProcessed.textContent = `${state.processed || 0} / ${state.total || 0}`;
+      statTopContact.textContent = state.topContactCount || 0;
+
+      if (state.status === 'RUNNING') {
+        pill.className = 'status-pill busy';
+        pill.textContent = 'En cours...';
+        stepLbl.textContent = state.currentFileName ? `Analyse : ${state.currentFileName}` : 'Traitement en cours...';
+        bar.className = 'progress-bar animated';
+        continuationNotice.style.display = 'none';
+      } else if (state.status === 'CONTINUING') {
+        pill.className = 'status-pill warn';
+        pill.textContent = 'Reprise programmée';
+        stepLbl.textContent = 'Reprise automatique au prochain lot (+1 min)...';
+        bar.className = 'progress-bar';
+        continuationNotice.style.display = 'block';
+      } else if (state.status === 'COMPLETED') {
+        pill.className = 'status-pill ready';
+        pill.textContent = 'Terminé';
+        stepLbl.textContent = 'Analyse terminée avec succès';
+        bar.className = 'progress-bar';
+        bar.style.width = '100%';
+        pctLbl.textContent = '100%';
+        continuationNotice.style.display = 'none';
+      } else if (state.status === 'ERROR') {
+        pill.className = 'status-pill warn';
+        pill.textContent = 'Erreur';
+        stepLbl.textContent = state.errorMessage || 'Erreur lors du traitement';
+        bar.className = 'progress-bar';
+        continuationNotice.style.display = 'none';
+      } else {
+        pill.className = 'status-pill ready';
+        pill.textContent = 'Prêt';
+        stepLbl.textContent = 'En attente de lancement';
+        bar.className = 'progress-bar';
+        continuationNotice.style.display = 'none';
+      }
+
+      // Remplissage liste candidats récents
+      if (state.recentCandidates && state.recentCandidates.length > 0) {
+        const liveList = document.getElementById('liveCandidatesList');
+        liveList.innerHTML = '';
+        state.recentCandidates.slice(-5).reverse().forEach(c => {
+          const item = document.createElement('div');
+          item.className = 'live-item';
+          
+          let badgeClass = 'pool';
+          if (c.reco === 'À contacter') badgeClass = 'contact';
+          else if (c.reco === 'À refuser') badgeClass = 'reject';
+          else if (c.reco === 'Erreur') badgeClass = 'error';
+
+          item.innerHTML = `
+            <div><strong>${c.name}</strong> <span style="color: var(--text-muted); font-size: 10px;">(${c.score}/5)</span></div>
+            <span class="badge ${badgeClass}">${c.reco}</span>
+          `;
+          liveList.appendChild(item);
+        });
+      }
+    }
+  </script>
+</body>
+</html>
