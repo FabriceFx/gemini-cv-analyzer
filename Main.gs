@@ -119,6 +119,8 @@ function _runAnalysis(options) {
     const filesToProcess = [];
     while (files.hasNext()) {
       const file = files.next();
+      const fileName = file.getName();
+      if (fileName.startsWith("tmp_")) continue;
       const mime = file.getMimeType();
       if (SUPPORTED_MIME_TYPES.includes(mime) && !processedIds[file.getId()]) {
         filesToProcess.push(file);

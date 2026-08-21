@@ -86,6 +86,8 @@ function purgeOldCVs() {
 
   while (files.hasNext()) {
     const file = files.next();
+    const fileName = file.getName();
+    if (fileName.startsWith("tmp_")) continue;
     const mimeType = file.getMimeType();
     
     if (SUPPORTED_MIME_TYPES.includes(mimeType) && file.getDateCreated() < cutoffDate) {
@@ -119,8 +121,8 @@ function purgeOldCVs() {
 }
 
 /**
- * Remplace les données identifiantes par 'Pseudonymisé' pour plusieurs fichiers de manière optimisée et ciblée.
- * Ne modifie que les colonnes A, B, C et la cellule Fichier CV des seules lignes purgées, afin de préserver intacts les liens RichText des autres candidats.
+ * Remplace les données identifiantes par 'Pseudonymisé' pour les seuls fichiers purgés de manière ciblée.
+ * Ne touche absolument pas aux autres lignes afin de préserver intacts leurs liens RichText et formats de téléphone.
  */
 function anonymizeResultsRowsBulk(sheet, idsDict) {
   const lastRow = sheet.getLastRow();
@@ -128,22 +130,14 @@ function anonymizeResultsRowsBulk(sheet, idsDict) {
   
   const numRows = lastRow - 3;
   const idValues = sheet.getRange(4, COL_INDEX.FILE_ID, numRows, 1).getValues();
-  const identData = sheet.getRange(4, 1, numRows, 3).getValues(); // Colonnes A (Nom), B (Email), C (Téléphone)
 
-  let modified = false;
   for (let i = 0; i < numRows; i++) {
     const currentId = (idValues[i][0] || '').toString().trim();
     if (idsDict[currentId]) {
-      identData[i][0] = "Pseudonymisé"; // Candidat (A)
-      identData[i][1] = "Pseudonymisé"; // Email (B)
-      identData[i][2] = "Pseudonymisé"; // Téléphone (C)
-      sheet.getRange(4 + i, COL_INDEX.FILE_LINK).setValue("Document purgé");
-      modified = true;
+      const rowIdx = 4 + i;
+      sheet.getRange(rowIdx, 1, 1, 3).setValues([["Pseudonymisé", "Pseudonymisé", "Pseudonymisé"]]);
+      sheet.getRange(rowIdx, COL_INDEX.FILE_LINK).setValue("Document purgé");
     }
-  }
-  
-  if (modified) {
-    sheet.getRange(4, 1, numRows, 3).setValues(identData);
   }
 }
 

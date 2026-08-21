@@ -96,24 +96,31 @@ function computeContactRecommendations(candidates, maxContact = MAX_CONTACT_CAND
 }
 
 /**
+ * Extrait le nom de domaine d'une URL de façon sécurisée (anti-contournement userinfo, query, port, fragment).
+ * @param {string} url
+ * @returns {string|null}
+ */
+function extractDomainFromUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  const m = url.match(/^https?:\/\/(?:www\.)?([^\/:?#@]+)(?::\d+)?(?=[\/?#]|$)/i);
+  return m ? m[1].toLowerCase() : null;
+}
+
+/**
  * Récupère le contenu HTML d'une page web (URL) et retourne le texte brut (scraping).
  * @param {string} url L'URL de l'annonce
  * @param {string} allowedDomainsStr Liste des domaines séparés par des virgules
  * @returns {string} Le texte brut de l'annonce
  */
 function fetchJobDescription(url, allowedDomainsStr) {
-  try {
-    const match = url.match(/^https?:\/\/(?:www\.)?([^\/:?#@]+)/i);
-    if (!match) throw new Error("Format d'URL invalide.");
-    const domain = match[1].toLowerCase();
+  const domain = extractDomainFromUrl(url);
+  if (!domain) {
+    throw new Error("Format d'URL invalide.");
+  }
 
-    // Vérifier si le domaine est autorisé de façon stricte (exact ou sous-domaine)
-    if (!isDomainAllowed(domain, allowedDomainsStr)) {
-      throw new Error(`Domaine non autorisé: ${domain}. Veuillez copier-coller le texte de l'annonce manuellement ou l'ajouter aux Domaines autorisés dans la Configuration.`);
-    }
-  } catch (e) {
-    if (e.message.includes("Domaine non autorisé")) throw e;
-    throw new Error(`URL invalide: ${e.message}`);
+  // Vérifier si le domaine est autorisé de façon stricte (exact ou sous-domaine)
+  if (!isDomainAllowed(domain, allowedDomainsStr)) {
+    throw new Error(`Domaine non autorisé: ${domain}. Veuillez copier-coller le texte de l'annonce manuellement ou l'ajouter aux Domaines autorisés dans la Configuration.`);
   }
 
   const response = UrlFetchApp.fetch(url, {
@@ -126,6 +133,9 @@ function fetchJobDescription(url, allowedDomainsStr) {
   });
 
   const code = response.getResponseCode();
+  if (code >= 300 && code < 400) {
+    throw new Error(`L'URL redirige vers une autre page (HTTP ${code}). Veuillez copier-coller l'URL finale de l'offre d'emploi ou son texte directement dans la cellule.`);
+  }
   if (code === 403 || code === 401) {
     throw new Error(`Accès refusé par le site (HTTP ${code}). Ce site protège son contenu contre la lecture automatique. Veuillez copier-coller le texte de l'annonce directement dans la cellule correspondante.`);
   }

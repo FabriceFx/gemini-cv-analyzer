@@ -153,25 +153,28 @@ function testIsDomainAllowed() {
   }
   Logger.log(`Tests domaines terminés: ${passed}/${testCases.length} réussis.`);
 
-  // Test de l'extraction regex anti-contournement
+  // Test de l'extraction de domaine et protection anti-contournement (appel direct de extractDomainFromUrl)
   const urlTestCases = [
-    { url: "https://evil.example?x=.linkedin.com", expectedAllowed: false },
-    { url: "https://evil.example#linkedin.com", expectedAllowed: false },
-    { url: "https://user@evil.example/path", expectedAllowed: false },
-    { url: "https://www.linkedin.com/jobs/view/123456", expectedAllowed: true },
-    { url: "https://pole-emploi.fr/candidat/offre/123", expectedAllowed: true }
+    { url: "https://evil.example?x=.linkedin.com", expectedDomain: "evil.example", expectedAllowed: false },
+    { url: "https://evil.example#linkedin.com", expectedDomain: "evil.example", expectedAllowed: false },
+    { url: "https://user@evil.example/path", expectedDomain: null, expectedAllowed: false },
+    { url: "https://linkedin.com@evil.example/offre", expectedDomain: null, expectedAllowed: false },
+    { url: "https://www.linkedin.com/jobs/view/123456", expectedDomain: "linkedin.com", expectedAllowed: true },
+    { url: "https://pole-emploi.fr/candidat/offre/123", expectedDomain: "pole-emploi.fr", expectedAllowed: true },
+    { url: "https://jobs.indeed.com:443/viewjob?id=1", expectedDomain: "jobs.indeed.com", expectedAllowed: true }
   ];
 
   let urlPassed = 0;
   for (const tc of urlTestCases) {
-    const match = tc.url.match(/^https?:\/\/(?:www\.)?([^\/:?#@]+)/i);
-    const domain = match ? match[1].toLowerCase() : "";
-    const allowedResult = isDomainAllowed(domain, allowed);
-    if (allowedResult === tc.expectedAllowed) {
+    const domain = extractDomainFromUrl(tc.url);
+    const domainMatchOk = domain === tc.expectedDomain;
+    const allowedResult = domain ? isDomainAllowed(domain, allowed) : false;
+    
+    if (domainMatchOk && allowedResult === tc.expectedAllowed) {
       urlPassed++;
       Logger.log(`✅ PASS (URL check): ${tc.url} -> domaine: "${domain}" -> autorisé: ${allowedResult}`);
     } else {
-      Logger.log(`❌ FAIL (URL check): ${tc.url} -> domaine: "${domain}" -> Attendu: ${tc.expectedAllowed}, Obtenu: ${allowedResult}`);
+      Logger.log(`❌ FAIL (URL check): ${tc.url} -> domaine obtenu: "${domain}" (attendu: "${tc.expectedDomain}") -> autorisé: ${allowedResult} (attendu: ${tc.expectedAllowed})`);
     }
   }
   Logger.log(`Tests URLs terminés: ${urlPassed}/${urlTestCases.length} réussis.`);

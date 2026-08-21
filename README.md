@@ -40,6 +40,8 @@ Le code source est organisé en 10 fichiers `.gs` :
 4. Autorisez l'exécution du script via les fenêtres d'avertissement Google (cliquez sur "Paramètres avancés" > "Accéder au projet (non sécurisé)").
 5. Confirmez la boîte de dialogue pour finaliser la mise en place. Les feuilles `Configuration`, `Résultats de l'analyse` et `Journal RGPD` vont être générées.
 
+> **🔄 Mise à jour depuis une version antérieure :** Si vous mettez à jour un projet existant, remplacez impérativement le fichier `appsscript.json` (qui active le service avancé Drive v2 pour la conversion automatique des DOCX) et ré-autorisez le script lors du premier lancement.
+
 ### 🛠️ Fonctionnalités et utilisation quotidienne
 
 1. **Clé API Gemini** : 
