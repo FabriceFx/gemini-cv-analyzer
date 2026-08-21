@@ -4,11 +4,11 @@
  */
 
 function analyzeCVs() {
-  return _runAnalysis({ interactive: true });
+  return _runAnalysis({ interactive: true, source: 'interactive' });
 }
 
 function analyzeCVsAutomated() {
-  return _runAnalysis({ interactive: false });
+  return _runAnalysis({ interactive: false, source: 'automated' });
 }
 
 /**
@@ -16,7 +16,7 @@ function analyzeCVsAutomated() {
  */
 function _resumeAnalysisTrigger() {
   _cleanupContinuationTriggers();
-  _runAnalysis({ interactive: false, isContinuation: true });
+  _runAnalysis({ interactive: false, isContinuation: true, source: 'sidebar' });
 }
 
 function _notifyAutomatedFailure(reason) {
@@ -37,12 +37,20 @@ function _notifyAutomatedFailure(reason) {
 function _runAnalysis(options) {
   const isInteractive = options && options.interactive;
   const isContinuation = options && options.isContinuation;
+  const source = (options && options.source) || (isInteractive ? 'interactive' : 'automated');
   const lock = LockService.getScriptLock();
   
   if (!lock.tryLock(5000)) {
-    if (isInteractive) SpreadsheetApp.getActiveSpreadsheet().toast("Une analyse est déjà en cours, veuillez patienter.", "⏳");
+    if (source === 'interactive') {
+      SpreadsheetApp.getActiveSpreadsheet().toast("Une analyse est déjà en cours, veuillez patienter.", "⏳");
+    } else if (source === 'sidebar') {
+      _updateProgressState({ status: "BUSY", errorMessage: "Une analyse est déjà en cours d'exécution." });
+    }
     return;
   }
+
+  // Activer le trigger chien de garde de secours à +7 minutes (au cas où le script serait tué brutalement)
+  _scheduleWatchdogTrigger();
 
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -50,12 +58,14 @@ function _runAnalysis(options) {
     const resultsSheet = ss.getSheetByName(RESULTS_SHEET_NAME);
 
     if (!configSheet || !resultsSheet) {
-      if (isInteractive) {
+      const errMsg = "Les feuilles Configuration et Résultats sont introuvables.";
+      if (source === 'interactive') {
         SpreadsheetApp.getUi().alert("Erreur : veuillez d'abord initialiser les feuilles via le menu '⚙️ Initialiser / Réinitialiser les feuilles'.");
-      } else {
-        _notifyAutomatedFailure("Les feuilles Configuration et Résultats sont introuvables.");
+      } else if (source === 'automated') {
+        _notifyAutomatedFailure(errMsg);
       }
-      _updateProgressState({ status: "ERROR", errorMessage: "Feuilles introuvables" });
+      _updateProgressState({ status: "ERROR", errorMessage: errMsg });
+      _cleanupContinuationTriggers();
       return;
     }
 
@@ -65,24 +75,27 @@ function _runAnalysis(options) {
     try {
       commonConfig = _prepareCommonConfig(configSheet, isInteractive);
     } catch (e) {
-      if (isInteractive) {
+      if (source === 'interactive') {
         SpreadsheetApp.getUi().alert(`Configuration requise : ${e.message}`);
-      } else {
+      } else if (source === 'automated') {
         _notifyAutomatedFailure(`Configuration incomplète : ${e.message}`);
       }
       _updateProgressState({ status: "ERROR", errorMessage: e.message });
+      _cleanupContinuationTriggers();
       return;
     }
     const { apiKey, jobDescription, model, criteria, systemPrompt, config } = commonConfig;
 
     const folderUrl = (config['URL du dossier Drive contenant les CVs'] || '').toString().trim();
     if (!folderUrl) {
-      if (isInteractive) {
+      const errMsg = "L'URL du dossier Drive configurée est manquante.";
+      if (source === 'interactive') {
         SpreadsheetApp.getUi().alert("Erreur de configuration : l'URL du dossier Drive est manquante.");
-      } else {
-        _notifyAutomatedFailure("L'URL du dossier Drive configurée est manquante.");
+      } else if (source === 'automated') {
+        _notifyAutomatedFailure(errMsg);
       }
-      _updateProgressState({ status: "ERROR", errorMessage: "URL Drive manquante" });
+      _updateProgressState({ status: "ERROR", errorMessage: errMsg });
+      _cleanupContinuationTriggers();
       return;
     }
 
@@ -93,12 +106,14 @@ function _runAnalysis(options) {
 
     const folderId = getFolderIdFromUrl(folderUrl);
     if (!folderId) {
-      if (isInteractive) {
+      const errMsg = "L'URL du dossier Drive configurée est invalide.";
+      if (source === 'interactive') {
         SpreadsheetApp.getUi().alert("Erreur de configuration : l'URL du dossier Drive semble invalide.");
-      } else {
-        _notifyAutomatedFailure("L'URL du dossier Drive configurée est invalide.");
+      } else if (source === 'automated') {
+        _notifyAutomatedFailure(errMsg);
       }
-      _updateProgressState({ status: "ERROR", errorMessage: "URL Drive invalide" });
+      _updateProgressState({ status: "ERROR", errorMessage: errMsg });
+      _cleanupContinuationTriggers();
       return;
     }
 
@@ -106,12 +121,14 @@ function _runAnalysis(options) {
     try {
       folder = DriveApp.getFolderById(folderId);
     } catch (e) {
-      if (isInteractive) {
-        SpreadsheetApp.getUi().alert(`Erreur d'accès Drive : impossible d'accéder au dossier. Détail : ${e.message}`);
-      } else {
-        _notifyAutomatedFailure(`Impossible d'accéder au dossier Drive : ${e.message}`);
+      const errMsg = `Impossible d'accéder au dossier Drive : ${e.message}`;
+      if (source === 'interactive') {
+        SpreadsheetApp.getUi().alert(`Erreur d'accès Drive : ${e.message}`);
+      } else if (source === 'automated') {
+        _notifyAutomatedFailure(errMsg);
       }
-      _updateProgressState({ status: "ERROR", errorMessage: e.message });
+      _updateProgressState({ status: "ERROR", errorMessage: errMsg });
+      _cleanupContinuationTriggers();
       return;
     }
 
@@ -146,7 +163,7 @@ function _runAnalysis(options) {
     const totalFilesCount = filesToProcess.length + alreadyProcessedCount;
 
     if (filesToProcess.length === 0) {
-      if (isInteractive) {
+      if (source === 'interactive') {
         SpreadsheetApp.getUi().alert("Aucun nouveau document à analyser. (PDF, Google Doc ou DOCX)");
       }
       _updateProgressState({
@@ -155,18 +172,22 @@ function _runAnalysis(options) {
         processed: totalFilesCount,
         currentFileName: "Tous les documents sont à jour"
       });
+      _cleanupContinuationTriggers();
       return;
     }
 
-    // Estimation des coûts et confirmation (uniquement en interactif et premier run)
-    if (isInteractive && !isContinuation) {
+    // Confirmation uniquement en interactif classique
+    if (source === 'interactive' && !isContinuation) {
       const ui = SpreadsheetApp.getUi();
       const costResponse = ui.alert(
         "Confirmation",
         `Vous êtes sur le point d'analyser ${filesToProcess.length} nouveau${filesToProcess.length > 1 ? 'x' : ''} document${filesToProcess.length > 1 ? 's' : ''} avec le modèle ${model}.\nVoulez-vous lancer le traitement ?`,
         ui.ButtonSet.YES_NO
       );
-      if (costResponse !== ui.Button.YES) return;
+      if (costResponse !== ui.Button.YES) {
+        _cleanupContinuationTriggers();
+        return;
+      }
       ss.toast(`Début de l'analyse : ${filesToProcess.length} document${filesToProcess.length > 1 ? 's' : ''} détecté${filesToProcess.length > 1 ? 's' : ''}.`, "Lancement 🚀");
     }
 
@@ -186,18 +207,38 @@ function _runAnalysis(options) {
     // Tentative de Context Caching si lot important
     let cacheName = null;
     if (filesToProcess.length >= 5) {
-      if (isInteractive) ss.toast("Vérification du cache de contexte...", "Cache 🧠");
+      if (source === 'interactive') ss.toast("Vérification du cache de contexte...", "Cache 🧠");
       cacheName = createGeminiCache(apiKey, model, systemPrompt, jobDescription, criteria);
     }
 
     let successCount = 0;
     let errorCount = 0;
     let stoppedByTimeout = false;
+    let maxBatchDuration = 0;
     const allRecentCandidates = [];
 
     for (let batchStart = 0; batchStart < filesToProcess.length; batchStart += batchSize) {
+      const elapsed = Date.now() - startTime;
+      
+      // Contrôle de temps proactif AVANT d'engager le lot (si temps écoulé + max batch + 30s > 4m30)
+      if (batchStart > 0 && elapsed + maxBatchDuration + 30000 > MAX_EXECUTION_TIME) {
+        const remaining = filesToProcess.length - batchStart;
+        if (remaining > 0) {
+          _scheduleContinuationTrigger();
+          _updateProgressState({
+            status: "CONTINUING",
+            currentFileName: "Reprise automatique programmée dans 1 min..."
+          });
+          if (source === 'interactive') {
+            ss.toast("Temps limite approché. Reprise automatique à +1 min.", "Reprise ⏳", 8);
+          }
+          stoppedByTimeout = true;
+          break;
+        }
+      }
+
       const batch = filesToProcess.slice(batchStart, batchStart + batchSize);
-      if (isInteractive) {
+      if (source === 'interactive') {
         ss.toast(`Traitement du lot ${Math.floor(batchStart / batchSize) + 1} (${batch.length} document${batch.length > 1 ? 's' : ''})...`, "Analyse 🔍");
       }
 
@@ -208,7 +249,12 @@ function _runAnalysis(options) {
         currentFileName: batch[0].getName()
       });
 
+      const batchStartTime = Date.now();
       const batchResults = analyzeDocumentsBatch(batch, apiKey, model, jobDescription, criteria, systemPrompt, cacheName);
+      const batchDuration = Date.now() - batchStartTime;
+      if (batchDuration > maxBatchDuration) {
+        maxBatchDuration = batchDuration;
+      }
 
       const rowsToAdd = [];
       const richTextLinks = [];
@@ -281,26 +327,18 @@ function _runAnalysis(options) {
         currentFileName: batch[batch.length - 1].getName()
       });
 
-      // Pause entre lots pour respecter le quota RPM
+      // Pause entre lots pour respecter le quota RPM (si temps restant suffisant)
       if (batchStart + batchSize < filesToProcess.length) {
-        Utilities.sleep(batchPauseMs);
-      }
-
-      // Détection de l'approche du timeout (4m30) -> Déclenchement de la reprise automatique
-      if (Date.now() - startTime > MAX_EXECUTION_TIME) {
-        const remaining = filesToProcess.length - (batchStart + batch.length);
-        if (remaining > 0) {
+        if (Date.now() - startTime + batchPauseMs + 30000 > MAX_EXECUTION_TIME) {
           _scheduleContinuationTrigger();
           _updateProgressState({
             status: "CONTINUING",
-            currentFileName: "Reprise automatique programmée dans 1 min..."
+            currentFileName: "Reprise automatique au prochain lot (+1 min)..."
           });
-          if (isInteractive) {
-            ss.toast("Temps d'exécution approché (4m30). Reprise automatique en arrière-plan à +1 min.", "Reprise ⏳", 8);
-          }
           stoppedByTimeout = true;
           break;
         }
+        Utilities.sleep(batchPauseMs);
       }
     }
 
@@ -328,7 +366,7 @@ function _runAnalysis(options) {
         
         if (summaryList.length > 0) {
           try {
-            if (isInteractive) ss.toast("Génération de la synthèse...", "Synthèse 🧠", 10);
+            if (source === 'interactive') ss.toast("Génération de la synthèse...", "Synthèse 🧠", 10);
             const sessionSynthesis = generateSessionSynthesis(summaryList.join("\n"), jobDescription, apiKey, model);
             resultsSheet.getRange("A2").setValue(`Synthèse globale : ${sessionSynthesis}`);
           } catch (synthErr) {
@@ -354,9 +392,9 @@ function _runAnalysis(options) {
       }
       if (errorCount > 0) endMessage += `\n⚠️ ${errorCount} fichier(s) en erreur (pourront être réanalysés).`;
       
-      if (isInteractive) {
+      if (source === 'interactive') {
         SpreadsheetApp.getUi().alert(`Bilan : ${endMessage}`);
-      } else {
+      } else if (source === 'automated') {
         const userEmail = Session.getEffectiveUser().getEmail() || Session.getActiveUser().getEmail();
         if (userEmail) {
           MailApp.sendEmail({
@@ -368,6 +406,19 @@ function _runAnalysis(options) {
       }
     }
 
+  } catch (err) {
+    Logger.log("Erreur globale _runAnalysis : " + err.message);
+    _updateProgressState({
+      status: "ERROR",
+      errorMessage: err.message
+    });
+    if (source === 'automated') {
+      _notifyAutomatedFailure(err.message);
+    } else if (source === 'interactive') {
+      SpreadsheetApp.getUi().alert(`Erreur : ${err.message}`);
+    }
+    _cleanupContinuationTriggers();
+    throw err;
   } finally {
     lock.releaseLock();
   }
@@ -502,9 +553,7 @@ function clearResults() {
 }
 
 /**
- * Supprime les anciennes lignes en statut 'Erreur' pour les fichiers qui vont être réanalysés,
- * afin d'éviter l'accumulation de doublons d'erreur dans la feuille des résultats.
- * 
+ * Supprime les anciennes lignes en statut 'Erreur' pour les fichiers qui vont être réanalysés.
  * @param {GoogleAppsScript.Spreadsheet.Sheet} resultsSheet
  * @param {string[]} fileIdsToProcess
  */
@@ -567,7 +616,6 @@ function _appendBatchResults(resultsSheet, rows, richTextLinks, errorIndices) {
 /**
  * Harmonise les recommandations de prise de contact après analyse et tri.
  * N'écrit QUE sur la colonne Recommandation (col 9) pour préserver strictement les liens et les formats de téléphones.
- * 
  * @param {GoogleAppsScript.Spreadsheet.Sheet} resultsSheet
  * @returns {number} Nombre de candidats retenus en prise de contact
  */
@@ -608,7 +656,7 @@ function _optimizeContactRecommendations(resultsSheet) {
 }
 
 /**
- * Met à jour l'état du traitement dans PropertiesService pour le polling de la Sidebar.
+ * Met à jour l'état du traitement dans PropertiesService via la fonction pure mergeJobState.
  * @param {Object} stateUpdates
  */
 function _updateProgressState(stateUpdates) {
@@ -619,7 +667,7 @@ function _updateProgressState(stateUpdates) {
     if (existingRaw) {
       try { currentState = JSON.parse(existingRaw); } catch (e) { }
     }
-    const newState = Object.assign({}, currentState, stateUpdates, { lastUpdated: Date.now() });
+    const newState = mergeJobState(currentState, stateUpdates);
     props.setProperty(PROP_KEY_JOB_STATE, JSON.stringify(newState));
   } catch (e) {
     Logger.log("Erreur mise à jour état progression : " + e.message);
@@ -643,7 +691,7 @@ function _cleanupContinuationTriggers() {
 }
 
 /**
- * Programme une reprise automatique à +1 minute lorsque le temps limite approche.
+ * Programme une reprise automatique proactive à +1 minute lorsque le temps limite approche.
  */
 function _scheduleContinuationTrigger() {
   _cleanupContinuationTriggers();
@@ -652,6 +700,17 @@ function _scheduleContinuationTrigger() {
     .after(60 * 1000)
     .create();
   Logger.log("Déclencheur de reprise automatique programmé dans 1 minute.");
+}
+
+/**
+ * Active un déclencheur chien de garde (watchdog) à +7 minutes au cas où le script serait tué brutalement par GAS.
+ */
+function _scheduleWatchdogTrigger() {
+  _cleanupContinuationTriggers();
+  ScriptApp.newTrigger(CONTINUATION_TRIGGER_HANDLER)
+    .timeBased()
+    .after(7 * 60 * 1000)
+    .create();
 }
 
 /**

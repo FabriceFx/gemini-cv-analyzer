@@ -173,3 +173,29 @@ function fetchJobDescription(url, allowedDomainsStr) {
 
   return text;
 }
+
+/**
+ * Fusionne l'état existant du job avec les mises à jour en garantissant la cohérence des compteurs et de l'horodatage.
+ * @param {Object} existing - État existant
+ * @param {Object} updates - Nouvelles valeurs à appliquer
+ * @param {number} [now] - Horodatage actuel (optionnel)
+ * @returns {Object}
+ */
+function mergeJobState(existing, updates, now) {
+  const current = existing && typeof existing === 'object' ? existing : {};
+  const patch = updates && typeof updates === 'object' ? updates : {};
+  const timestamp = typeof now === 'number' ? now : Date.now();
+
+  return {
+    status: patch.status !== undefined ? patch.status : (current.status || "IDLE"),
+    total: patch.total !== undefined ? Number(patch.total) : (Number(current.total) || 0),
+    processed: patch.processed !== undefined ? Number(patch.processed) : (Number(current.processed) || 0),
+    successCount: patch.successCount !== undefined ? Number(patch.successCount) : (Number(current.successCount) || 0),
+    errorCount: patch.errorCount !== undefined ? Number(patch.errorCount) : (Number(current.errorCount) || 0),
+    topContactCount: patch.topContactCount !== undefined ? Number(patch.topContactCount) : (Number(current.topContactCount) || 0),
+    currentFileName: patch.currentFileName !== undefined ? String(patch.currentFileName) : (current.currentFileName || ""),
+    errorMessage: patch.errorMessage !== undefined ? String(patch.errorMessage) : (current.errorMessage || ""),
+    recentCandidates: Array.isArray(patch.recentCandidates) ? patch.recentCandidates : (Array.isArray(current.recentCandidates) ? current.recentCandidates : []),
+    lastUpdated: timestamp
+  };
+}

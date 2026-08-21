@@ -181,28 +181,48 @@ function testIsDomainAllowed() {
 }
 
 /**
- * Fonction de test pour valider la structure et la sérialisation de l'état de progression.
+ * Fonction de test pour valider la logique pure de mergeJobState.
  */
 function testJobStateManagement() {
-  const sampleState = {
-    status: "RUNNING",
-    total: 25,
-    processed: 10,
-    successCount: 9,
-    errorCount: 1,
-    currentFileName: "CV_Jean_Dupont.pdf",
-    recentCandidates: [
-      { name: "Jean Dupont", score: 4, reco: "À contacter" }
-    ],
-    lastUpdated: Date.now()
+  const initial = {
+    status: "IDLE",
+    total: 0,
+    processed: 0,
+    successCount: 0,
+    errorCount: 0,
+    recentCandidates: []
   };
 
-  const serialized = JSON.stringify(sampleState);
-  const parsed = parseJsonSafely(serialized);
+  const fixedTime = 1700000000000;
+  const step1 = mergeJobState(initial, {
+    status: "RUNNING",
+    total: 20,
+    currentFileName: "CV_1.pdf"
+  }, fixedTime);
 
-  if (parsed.status === "RUNNING" && parsed.total === 25 && parsed.processed === 10 && parsed.recentCandidates.length === 1) {
-    Logger.log("✅ PASS: Gestion et sérialisation de l'état de progression validée.");
+  const ok1 = step1.status === "RUNNING" && step1.total === 20 && step1.processed === 0 && step1.currentFileName === "CV_1.pdf" && step1.lastUpdated === fixedTime;
+
+  const step2 = mergeJobState(step1, {
+    processed: 5,
+    successCount: 4,
+    errorCount: 1,
+    recentCandidates: [{ name: "Alice", score: 5, reco: "À contacter" }]
+  }, fixedTime + 1000);
+
+  const ok2 = step2.status === "RUNNING" && step2.total === 20 && step2.processed === 5 && step2.successCount === 4 && step2.errorCount === 1 && step2.recentCandidates.length === 1 && step2.lastUpdated === fixedTime + 1000;
+
+  const step3 = mergeJobState(step2, {
+    status: "COMPLETED",
+    topContactCount: 3,
+    currentFileName: "Terminé"
+  }, fixedTime + 2000);
+
+  const ok3 = step3.status === "COMPLETED" && step3.total === 20 && step3.processed === 5 && step3.topContactCount === 3 && step3.recentCandidates.length === 1;
+
+  if (ok1 && ok2 && ok3) {
+    Logger.log("✅ PASS: mergeJobState gère correctement l'accumulation et la cohérence de l'état du job.");
   } else {
-    Logger.log("❌ FAIL: Échec de validation de l'état de progression.");
+    Logger.log(`❌ FAIL: Erreur dans mergeJobState (ok1=${ok1}, ok2=${ok2}, ok3=${ok3})`);
   }
 }
+

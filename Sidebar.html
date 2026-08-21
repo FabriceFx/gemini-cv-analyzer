@@ -25,9 +25,7 @@
       --danger-bg: #fef2f2;
       --radius-sm: 6px;
       --radius-md: 10px;
-      --radius-lg: 14px;
       --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
-      --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -2px rgba(0,0,0,0.05);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -35,11 +33,13 @@
       font-family: 'Inter', sans-serif;
       background-color: #f1f5f9;
       color: var(--text-main);
-      font-size: 13px;
-      line-height: 1.5;
-      padding: 12px;
+      font-size: 12.5px;
+      line-height: 1.45;
+      padding: 10px;
       overflow-y: auto;
       min-height: 100vh;
+      max-width: 300px;
+      margin: 0 auto;
     }
 
     /* En-tête */
@@ -47,34 +47,29 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding-bottom: 12px;
+      padding-bottom: 10px;
       border-bottom: 1px solid var(--border);
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
     .app-brand {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
     }
-    .app-logo {
-      font-size: 20px;
-      line-height: 1;
-    }
+    .app-logo { font-size: 18px; line-height: 1; }
     .app-title {
       font-family: 'Outfit', sans-serif;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
       color: var(--text-main);
-      letter-spacing: -0.2px;
     }
     .status-pill {
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 600;
-      padding: 3px 8px;
-      border-radius: 12px;
+      padding: 2px 7px;
+      border-radius: 10px;
       display: inline-flex;
       align-items: center;
-      gap: 4px;
     }
     .status-pill.ready { background: var(--success-bg); color: var(--success); border: 1px solid #bbf7d0; }
     .status-pill.busy { background: var(--primary-light); color: var(--primary); border: 1px solid #bfdbfe; }
@@ -85,25 +80,25 @@
       display: flex;
       background: #e2e8f0;
       border-radius: var(--radius-md);
-      padding: 3px;
+      padding: 2px;
       gap: 2px;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
     .tab-btn {
       flex: 1;
       border: none;
       background: transparent;
-      padding: 7px 4px;
+      padding: 6px 2px;
       border-radius: var(--radius-sm);
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 600;
       color: var(--text-muted);
       cursor: pointer;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: all 0.2s ease;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 5px;
+      gap: 3px;
     }
     .tab-btn:hover { color: var(--text-main); }
     .tab-btn.active {
@@ -114,111 +109,101 @@
 
     /* Contenu des onglets */
     .tab-pane { display: none; }
-    .tab-pane.active { display: block; animation: fadeIn 0.2s ease-in-out; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .tab-pane.active { display: block; animation: fadeIn 0.15s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 
     /* Cartes & Groupes de formulaire */
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      padding: 14px;
-      margin-bottom: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
       box-shadow: var(--shadow-sm);
     }
     .card-title {
       font-family: 'Outfit', sans-serif;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-main);
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
     }
 
-    .form-group { margin-bottom: 12px; }
+    .form-group { margin-bottom: 10px; }
     .form-group:last-child { margin-bottom: 0; }
     label {
       display: block;
-      font-size: 11.5px;
+      font-size: 11px;
       font-weight: 600;
       color: #334155;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
     }
     .input-control, select, textarea {
       width: 100%;
-      padding: 8px 10px;
+      padding: 7px 9px;
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
-      font-size: 12px;
+      font-size: 11.5px;
       font-family: inherit;
       color: var(--text-main);
       background: var(--surface);
       outline: none;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
-    textarea { resize: vertical; min-height: 55px; }
+    textarea { resize: vertical; min-height: 50px; }
     .input-control:focus, select:focus, textarea:focus {
       border-color: var(--border-focus);
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-    }
-    .hint-text {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-top: 3px;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
     }
 
     /* Boutons */
     .btn {
       width: 100%;
-      padding: 10px 14px;
+      padding: 9px 12px;
       border: none;
       border-radius: var(--radius-md);
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       font-family: 'Outfit', sans-serif;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      gap: 6px;
+      transition: all 0.2s ease;
     }
     .btn-primary {
       background: var(--primary);
       color: white;
-      box-shadow: 0 2px 4px rgba(37, 99, 235, 0.25);
+      box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
     }
-    .btn-primary:hover:not(:disabled) {
-      background: var(--primary-hover);
-      box-shadow: 0 4px 8px rgba(37, 99, 235, 0.35);
-      transform: translateY(-1px);
-    }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
     .btn-secondary {
       background: #f1f5f9;
       color: #334155;
       border: 1px solid var(--border);
-      margin-top: 8px;
+      margin-top: 6px;
     }
     .btn-secondary:hover:not(:disabled) { background: #e2e8f0; color: var(--text-main); }
-    .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
     /* Suivi temps réel & Barre de progression */
     .progress-container {
       background: #e2e8f0;
-      border-radius: 10px;
-      height: 10px;
+      border-radius: 8px;
+      height: 8px;
       overflow: hidden;
-      margin: 12px 0;
-      position: relative;
+      margin: 10px 0;
     }
     .progress-bar {
       height: 100%;
       background: linear-gradient(90deg, #3b82f6, #2563eb);
       width: 0%;
-      border-radius: 10px;
-      transition: width 0.4s ease;
+      border-radius: 8px;
+      transition: width 0.3s ease;
     }
     .progress-bar.animated {
       background: linear-gradient(90deg, #3b82f6, #60a5fa, #3b82f6);
@@ -230,39 +215,39 @@
     .stats-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin: 12px 0;
+      gap: 6px;
+      margin: 10px 0;
     }
     .stat-card {
       background: var(--surface-variant);
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
-      padding: 8px 10px;
+      padding: 6px 8px;
       text-align: center;
     }
-    .stat-val { font-size: 16px; font-weight: 700; font-family: 'Outfit', sans-serif; color: var(--text-main); }
-    .stat-lbl { font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+    .stat-val { font-size: 14px; font-weight: 700; font-family: 'Outfit', sans-serif; color: var(--text-main); }
+    .stat-lbl { font-size: 9.5px; color: var(--text-muted); text-transform: uppercase; }
 
     /* Liste d'historique en direct */
     .live-list {
-      max-height: 200px;
+      max-height: 180px;
       overflow-y: auto;
-      margin-top: 8px;
+      margin-top: 6px;
     }
     .live-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 6px 8px;
+      padding: 5px 7px;
       background: var(--surface-variant);
       border-radius: var(--radius-sm);
       margin-bottom: 4px;
-      font-size: 11.5px;
+      font-size: 11px;
     }
     .badge {
-      font-size: 10px;
+      font-size: 9.5px;
       font-weight: 700;
-      padding: 2px 6px;
+      padding: 2px 5px;
       border-radius: 4px;
     }
     .badge.contact { background: var(--success-bg); color: var(--success); }
@@ -275,30 +260,30 @@
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 12px;
-      padding-bottom: 10px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
       border-bottom: 1px solid var(--border);
     }
-    .candidate-name { font-size: 15px; font-weight: 700; font-family: 'Outfit', sans-serif; color: var(--text-main); }
+    .candidate-name { font-size: 14px; font-weight: 700; font-family: 'Outfit', sans-serif; color: var(--text-main); }
     .score-chip {
       background: #eff6ff;
       color: var(--primary);
       font-weight: 700;
-      font-size: 13px;
-      padding: 4px 8px;
+      font-size: 12px;
+      padding: 3px 6px;
       border-radius: var(--radius-sm);
       border: 1px solid #bfdbfe;
     }
-    .detail-section { margin-bottom: 10px; }
-    .detail-title { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 3px; }
-    .detail-content { font-size: 12px; color: #1e293b; background: var(--surface-variant); padding: 7px 9px; border-radius: var(--radius-sm); }
+    .detail-section { margin-bottom: 8px; }
+    .detail-title { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px; }
+    .detail-content { font-size: 11.5px; color: #1e293b; background: var(--surface-variant); padding: 6px 8px; border-radius: var(--radius-sm); word-break: break-word; }
     
     /* Feedback Alertes */
     .toast {
-      padding: 8px 12px;
+      padding: 7px 10px;
       border-radius: var(--radius-sm);
-      font-size: 11.5px;
-      margin-bottom: 10px;
+      font-size: 11px;
+      margin-bottom: 8px;
       display: none;
     }
     .toast.success { background: var(--success-bg); color: var(--success); border: 1px solid #bbf7d0; display: block; }
@@ -312,7 +297,7 @@
   <div class="app-header">
     <div class="app-brand">
       <span class="app-logo">🚀</span>
-      <div class="app-title">Analyseur de CV AI</div>
+      <div class="app-title">Analyseur de CV</div>
     </div>
     <span id="headerStatusPill" class="status-pill ready">Prêt</span>
   </div>
@@ -333,12 +318,12 @@
       <div class="card">
         <div class="card-title">📁 Dossier & Offre</div>
         <div class="form-group">
-          <label for="folderUrl">URL du dossier Drive contenant les CVs</label>
+          <label for="folderUrl">Dossier Drive (CVs)</label>
           <input type="text" id="folderUrl" class="input-control" placeholder="https://drive.google.com/drive/folders/..." required />
         </div>
         <div class="form-group">
-          <label for="jobDescription">URL ou texte de l'annonce</label>
-          <textarea id="jobDescription" class="input-control" placeholder="Collez l'URL de l'annonce ou directement sa description textuelle..." required></textarea>
+          <label for="jobDescription">Offre d'emploi (URL ou texte)</label>
+          <textarea id="jobDescription" class="input-control" placeholder="Collez l'URL ou la description textuelle de l'offre..." required></textarea>
         </div>
       </div>
 
@@ -348,30 +333,26 @@
           <label for="modelSelect">Modèle Gemini</label>
           <select id="modelSelect">
             <option value="gemini-3.7-flash">gemini-3.7-flash (Recommandé)</option>
-            <option value="gemini-3.7-pro">gemini-3.7-pro</option>
-            <option value="gemini-3.5-flash">gemini-3.5-flash</option>
-            <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
-            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
           </select>
         </div>
         <div class="form-group">
           <label for="accountTypeSelect">Type de compte Gemini</label>
           <select id="accountTypeSelect">
             <option value="Gratuit (Free tier)">Gratuit (Free tier - 3 CVs/12s)</option>
-            <option value="Payant (Pay-as-you-go)">Payant (Pay-as-you-go - 15 CVs/6s & Confidentialité)</option>
+            <option value="Payant (Pay-as-you-go)">Payant (Pay-as-you-go - Rapide & RGPD)</option>
           </select>
         </div>
         <div class="form-group">
-          <label for="criteriaInput">Critères spécifiques du recruteur (optionnel)</label>
-          <input type="text" id="criteriaInput" class="input-control" placeholder="Ex: Expérience React 3+ ans, bilingue..." />
+          <label for="criteriaInput">Critères spécifiques (optionnel)</label>
+          <input type="text" id="criteriaInput" class="input-control" placeholder="Ex: Expérience React 3+ ans..." />
         </div>
       </div>
 
       <button type="submit" id="btnLaunch" class="btn btn-primary">
-        <span>🚀 Lancer l'analyse intelligente</span>
+        <span>🚀 Lancer l'analyse</span>
       </button>
       <button type="button" class="btn btn-secondary" onclick="saveOnlyConfig()">
-        💾 Sauvegarder la configuration
+        💾 Sauvegarder la config
       </button>
     </form>
   </div>
@@ -381,8 +362,8 @@
     <div class="card">
       <div class="card-title">📊 Avancement de l'analyse</div>
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span id="progressStepLabel" style="font-weight: 600; color: #334155;">En attente</span>
-        <span id="progressPercentage" style="font-weight: 700; color: var(--primary);">0%</span>
+        <span id="progressStepLabel" style="font-weight: 600; color: #334155; font-size: 11.5px;">En attente</span>
+        <span id="progressPercentage" style="font-weight: 700; color: var(--primary); font-size: 12px;">0%</span>
       </div>
       
       <div class="progress-container">
@@ -401,15 +382,15 @@
       </div>
 
       <div id="continuationNotice" class="toast info" style="display: none;">
-        ⏳ <strong>Reprise automatique :</strong> Temps limite approché. Le traitement se poursuit automatiquement au lot suivant.
+        ⏳ <strong>Reprise automatique :</strong> Temps limite approché. Le traitement se poursuit automatiquement au lot suivant (+1 min).
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title">⚡ Candidats récents analysés</div>
+      <div class="card-title">⚡ Derniers profils analysés</div>
       <div id="liveCandidatesList" class="live-list">
-        <div style="color: var(--text-muted); font-size: 11.5px; text-align: center; padding: 10px;">
-          Aucun document en cours de traitement.
+        <div id="liveEmptyMsg" style="color: var(--text-muted); font-size: 11px; text-align: center; padding: 8px;">
+          Aucun document en cours.
         </div>
       </div>
     </div>
@@ -417,13 +398,13 @@
 
   <!-- Onglet 3 : Fiche Candidat -->
   <div id="tabCandidate" class="tab-pane">
-    <div class="card" style="padding: 10px 12px;">
-      <label for="candidatePicker">Sélectionner un profil</label>
-      <div style="display: flex; gap: 6px;">
+    <div class="card" style="padding: 8px 10px;">
+      <label for="candidatePicker">Sélectionner un candidat</label>
+      <div style="display: flex; gap: 4px;">
         <select id="candidatePicker" onchange="loadCandidateDetails(this.value)">
-          <option value="">-- Choisir un candidat --</option>
+          <option value="">-- Choisir un profil --</option>
         </select>
-        <button type="button" class="btn btn-secondary" style="width: auto; margin-top: 0; padding: 6px 10px;" onclick="syncWithActiveRow()" title="Synchroniser avec la ligne sélectionnée dans le tableau">🔄</button>
+        <button type="button" class="btn btn-secondary" style="width: auto; margin-top: 0; padding: 5px 8px;" onclick="syncWithActiveRow()" title="Synchroniser avec la ligne active">🔄</button>
       </div>
     </div>
 
@@ -431,14 +412,17 @@
       <div class="candidate-card-header">
         <div>
           <div id="cardCandidateName" class="candidate-name">Candidat</div>
-          <span id="cardBadgeReco" class="badge contact" style="margin-top: 4px; display: inline-block;">À contacter</span>
+          <span id="cardBadgeReco" class="badge contact" style="margin-top: 3px; display: inline-block;">À contacter</span>
         </div>
         <div id="cardScore" class="score-chip">5 / 5</div>
       </div>
 
       <div class="detail-section">
         <div class="detail-title">📬 Coordonnées</div>
-        <div class="detail-content" id="cardContactInfo">-</div>
+        <div class="detail-content" id="cardContactInfo">
+          <div><strong>Email :</strong> <span id="cardEmailVal">-</span></div>
+          <div><strong>Téléphone :</strong> <span id="cardPhoneVal">-</span></div>
+        </div>
       </div>
 
       <div class="detail-section">
@@ -456,26 +440,26 @@
         <div class="detail-content" id="cardWeaknesses" style="background: #fffbeb; color: #92400e;">-</div>
       </div>
 
-      <div style="display: flex; gap: 8px; margin-top: 14px;">
+      <div style="display: flex; gap: 6px; margin-top: 10px;">
         <a id="cardDriveLink" href="#" target="_blank" class="btn btn-secondary" style="flex: 1; text-decoration: none; margin-top: 0;">
-          📄 Ouvrir le CV
+          📄 Ouvrir CV
         </a>
-        <button type="button" id="btnDraftEmail" class="btn btn-primary" style="flex: 1.2;" onclick="draftCandidateEmail()">
-          ✉️ Brouillon Gmail
+        <button type="button" id="btnDraftEmail" class="btn btn-primary" style="flex: 1.1;" onclick="draftCandidateEmail()">
+          ✉️ Brouillon
         </button>
       </div>
     </div>
 
-    <div id="emptyCandidatePrompt" style="text-align: center; color: var(--text-muted); padding: 24px 12px;">
-      Cliquez sur une ligne de candidat dans la feuille de résultats ou sélectionnez-en un dans la liste ci-dessus pour afficher sa fiche complète.
+    <div id="emptyCandidatePrompt" style="text-align: center; color: var(--text-muted); padding: 18px 8px; font-size: 11px;">
+      Sélectionnez une ligne dans la feuille de résultats ou choisissez un candidat dans la liste ci-dessus.
     </div>
   </div>
 
   <script>
     let pollingInterval = null;
     let currentCandidateRow = null;
+    let activeTabName = 'tabConfig';
 
-    // Initialisation au chargement de la Sidebar
     window.addEventListener('DOMContentLoaded', () => {
       loadInitialData();
     });
@@ -488,6 +472,7 @@
     }
 
     function switchTab(tabId) {
+      activeTabName = tabId;
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
 
@@ -507,11 +492,15 @@
         .withSuccessHandler(data => {
           if (!data) return;
 
+          // Remplissage dynamique des modèles
+          if (data.availableModels && data.availableModels.length > 0) {
+            populateModelSelect(data.availableModels, data.config ? data.config.model : 'gemini-3.7-flash');
+          }
+
           // Remplissage formulaire
           if (data.config) {
             document.getElementById('folderUrl').value = data.config.folderUrl || '';
             document.getElementById('jobDescription').value = data.config.jobDescription || '';
-            if (data.config.model) document.getElementById('modelSelect').value = data.config.model;
             if (data.config.accountType) document.getElementById('accountTypeSelect').value = data.config.accountType;
             document.getElementById('criteriaInput').value = data.config.criteria || '';
           }
@@ -532,9 +521,21 @@
         .getSidebarInitialData();
     }
 
+    function populateModelSelect(models, selectedModel) {
+      const select = document.getElementById('modelSelect');
+      select.innerHTML = '';
+      models.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m === 'gemini-3.7-flash' ? `${m} (Recommandé)` : m;
+        if (m === selectedModel) opt.selected = true;
+        select.appendChild(opt);
+      });
+    }
+
     function populateCandidatePicker(candidates, selected) {
       const picker = document.getElementById('candidatePicker');
-      picker.innerHTML = '<option value="">-- Choisir un candidat --</option>';
+      picker.innerHTML = '<option value="">-- Choisir un profil --</option>';
 
       if (candidates && candidates.length > 0) {
         candidates.forEach(c => {
@@ -581,6 +582,7 @@
         .getCandidateDetailsByRow(Number(rowNumber));
     }
 
+    // Rendu 100% sécurisé sans aucun innerHTML sur les données candidates
     function renderCandidateCard(candidate) {
       currentCandidateRow = candidate.rowNumber;
       document.getElementById('cardCandidateName').textContent = candidate.name || 'Inconnu';
@@ -593,7 +595,8 @@
       else if (candidate.recommendation === "Erreur") badge.className = "badge error";
       else badge.className = "badge pool";
 
-      document.getElementById('cardContactInfo').innerHTML = `<strong>Email :</strong> ${candidate.email || 'Non renseigné'}<br><strong>Téléphone :</strong> ${candidate.phone || 'Non renseigné'}`;
+      document.getElementById('cardEmailVal').textContent = candidate.email || 'Non renseigné';
+      document.getElementById('cardPhoneVal').textContent = candidate.phone || 'Non renseigné';
       document.getElementById('cardSkills').textContent = candidate.skills || 'Non renseigné';
       document.getElementById('cardStrengths').textContent = candidate.strengths || 'Aucun point fort mentionné';
       document.getElementById('cardWeaknesses').textContent = candidate.weaknesses || 'Aucun point de vigilance';
@@ -619,7 +622,7 @@
       google.script.run
         .withSuccessHandler(res => {
           btn.disabled = false;
-          btn.textContent = "✉️ Brouillon Gmail";
+          btn.textContent = "✉️ Brouillon";
           if (res && res.ok) {
             showToast(res.message, "success");
           } else {
@@ -628,7 +631,7 @@
         })
         .withFailureHandler(err => {
           btn.disabled = false;
-          btn.textContent = "✉️ Brouillon Gmail";
+          btn.textContent = "✉️ Brouillon";
           showToast("Erreur : " + err.message, "error");
         })
         .draftSingleCandidateEmail(currentCandidateRow);
@@ -648,8 +651,8 @@
       const data = getFormData();
       google.script.run
         .withSuccessHandler(res => {
-          if (res && res.ok) showToast("Configuration sauvegardée dans le classeur.", "success");
-          else showToast("Erreur de sauvegarde.", "error");
+          if (res && res.ok) showToast("Configuration sauvegardée.", "success");
+          else showToast("Erreur : " + (res ? res.message : "Inconnue"), "error");
         })
         .saveSidebarConfig(data);
     }
@@ -668,7 +671,7 @@
       google.script.run
         .withSuccessHandler(res => {
           btn.disabled = false;
-          btn.innerHTML = '<span>🚀 Lancer l\'analyse intelligente</span>';
+          btn.innerHTML = '<span>🚀 Lancer l\'analyse</span>';
           if (res && res.ok) {
             switchTab('tabProgress');
             startPolling();
@@ -678,16 +681,16 @@
         })
         .withFailureHandler(err => {
           btn.disabled = false;
-          btn.innerHTML = '<span>🚀 Lancer l\'analyse intelligente</span>';
+          btn.innerHTML = '<span>🚀 Lancer l\'analyse</span>';
           showToast("Erreur : " + err.message, "error");
         })
-        .startAnalysisFromSidebar();
+        .startAnalysisFromSidebar(data);
     }
 
     function startPolling() {
       if (pollingInterval) clearInterval(pollingInterval);
       pollProgress();
-      pollingInterval = setInterval(pollProgress, 2500);
+      pollingInterval = setInterval(pollProgress, 4000);
     }
 
     function stopPolling() {
@@ -701,18 +704,42 @@
       google.script.run
         .withSuccessHandler(state => {
           updateJobDisplay(state);
-          if (state && (state.status === 'COMPLETED' || state.status === 'ERROR' || state.status === 'IDLE')) {
-            if (state.status === 'COMPLETED') {
-              showToast("Analyse terminée avec succès !", "success");
+          if (state) {
+            // Détection état périmé (> 8 min sans mise à jour)
+            if (state.status === 'RUNNING' && state.lastUpdated && (Date.now() - state.lastUpdated > 8 * 60 * 1000)) {
+              state.status = 'ERROR';
+              state.errorMessage = 'Traitement interrompu (délai dépassé)';
+              updateJobDisplay(state);
               stopPolling();
-              loadInitialData(); // Recharger les candidats
-            } else if (state.status === 'ERROR') {
-              showToast("Analyse interrompue : " + (state.errorMessage || "Erreur inconnue"), "error");
+              return;
+            }
+
+            if (state.status === 'COMPLETED' || state.status === 'ERROR' || state.status === 'IDLE') {
               stopPolling();
+              if (state.status === 'COMPLETED') {
+                showToast("Analyse terminée avec succès !", "success");
+                // Recharger uniquement les candidats sans écraser le formulaire
+                refreshCandidatesOnly();
+              } else if (state.status === 'ERROR') {
+                showToast("Analyse interrompue : " + (state.errorMessage || "Erreur inconnue"), "error");
+              }
             }
           }
         })
+        .withFailureHandler(() => {
+          // Erreur réseau temporaire, continuer le polling
+        })
         .getAnalysisProgress();
+    }
+
+    function refreshCandidatesOnly() {
+      google.script.run
+        .withSuccessHandler(data => {
+          if (data && data.candidatesList) {
+            populateCandidatePicker(data.candidatesList, data.selectedCandidate);
+          }
+        })
+        .getSidebarInitialData();
     }
 
     function updateJobDisplay(state) {
@@ -744,8 +771,8 @@
         continuationNotice.style.display = 'none';
       } else if (state.status === 'CONTINUING') {
         pill.className = 'status-pill warn';
-        pill.textContent = 'Reprise programmée';
-        stepLbl.textContent = 'Reprise automatique au prochain lot (+1 min)...';
+        pill.textContent = 'Reprise';
+        stepLbl.textContent = 'Reprise automatique (+1 min)...';
         bar.className = 'progress-bar';
         continuationNotice.style.display = 'block';
       } else if (state.status === 'COMPLETED') {
@@ -770,7 +797,7 @@
         continuationNotice.style.display = 'none';
       }
 
-      // Remplissage liste candidats récents
+      // Rendu 100% sécurisé de la liste des candidats récents (sans innerHTML)
       if (state.recentCandidates && state.recentCandidates.length > 0) {
         const liveList = document.getElementById('liveCandidatesList');
         liveList.innerHTML = '';
@@ -778,15 +805,28 @@
           const item = document.createElement('div');
           item.className = 'live-item';
           
+          const infoDiv = document.createElement('div');
+          const nameStrong = document.createElement('strong');
+          nameStrong.textContent = c.name || 'Inconnu';
+          const scoreSpan = document.createElement('span');
+          scoreSpan.style.color = 'var(--text-muted)';
+          scoreSpan.style.fontSize = '9.5px';
+          scoreSpan.style.marginLeft = '4px';
+          scoreSpan.textContent = `(${c.score}/5)`;
+
+          infoDiv.appendChild(nameStrong);
+          infoDiv.appendChild(scoreSpan);
+
+          const badgeSpan = document.createElement('span');
+          badgeSpan.textContent = c.reco || 'À garder en vivier';
           let badgeClass = 'pool';
           if (c.reco === 'À contacter') badgeClass = 'contact';
           else if (c.reco === 'À refuser') badgeClass = 'reject';
           else if (c.reco === 'Erreur') badgeClass = 'error';
+          badgeSpan.className = `badge ${badgeClass}`;
 
-          item.innerHTML = `
-            <div><strong>${c.name}</strong> <span style="color: var(--text-muted); font-size: 10px;">(${c.score}/5)</span></div>
-            <span class="badge ${badgeClass}">${c.reco}</span>
-          `;
+          item.appendChild(infoDiv);
+          item.appendChild(badgeSpan);
           liveList.appendChild(item);
         });
       }

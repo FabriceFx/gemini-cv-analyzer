@@ -10,7 +10,7 @@
 function showSidebar() {
   const htmlOutput = HtmlService.createHtmlOutputFromFile('Sidebar')
     .setTitle("🚀 Analyseur de CV AI")
-    .setWidth(360);
+    .setWidth(300);
   SpreadsheetApp.getUi().showSidebar(htmlOutput);
 }
 
@@ -105,11 +105,15 @@ function getSidebarInitialData() {
 }
 
 /**
- * Enregistre les modifications de configuration saisies dans le formulaire de la Sidebar.
+ * Enregistre les modifications de configuration saisies dans le formulaire de la Sidebar en écrivant par libellé en colonne A.
  * @param {Object} formData
  * @returns {{ok: boolean, message: string}}
  */
 function saveSidebarConfig(formData) {
+  if (!formData || typeof formData !== 'object') {
+    return { ok: false, message: "Données de formulaire invalides." };
+  }
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
   if (!configSheet) {
@@ -118,23 +122,23 @@ function saveSidebarConfig(formData) {
   }
 
   try {
+    const data = configSheet.getRange("A:B").getValues();
     const mapping = {
-      folderUrl: "B4",
-      jobDescription: "B5",
-      model: "B6",
-      accountType: "B7",
-      criteria: "B8",
-      retentionDays: "B10",
-      allowedDomains: "B11"
+      "URL du dossier Drive contenant les CVs": formData.folderUrl,
+      "URL ou texte de l'annonce": formData.jobDescription,
+      "Modèle Gemini": formData.model,
+      "Type de compte Gemini": formData.accountType,
+      "Critères spécifiques du recruteur": formData.criteria,
+      "Délai de rétention RGPD (jours)": formData.retentionDays !== undefined ? Number(formData.retentionDays) : undefined,
+      "Domaines autorisés": formData.allowedDomains
     };
 
-    if (formData.folderUrl !== undefined) configSheet.getRange(mapping.folderUrl).setValue(formData.folderUrl);
-    if (formData.jobDescription !== undefined) configSheet.getRange(mapping.jobDescription).setValue(formData.jobDescription);
-    if (formData.model !== undefined) configSheet.getRange(mapping.model).setValue(formData.model);
-    if (formData.accountType !== undefined) configSheet.getRange(mapping.accountType).setValue(formData.accountType);
-    if (formData.criteria !== undefined) configSheet.getRange(mapping.criteria).setValue(formData.criteria);
-    if (formData.retentionDays !== undefined) configSheet.getRange(mapping.retentionDays).setValue(Number(formData.retentionDays) || 730);
-    if (formData.allowedDomains !== undefined) configSheet.getRange(mapping.allowedDomains).setValue(formData.allowedDomains);
+    for (let i = 0; i < data.length; i++) {
+      const label = (data[i][0] || '').toString().trim();
+      if (mapping[label] !== undefined && mapping[label] !== null) {
+        configSheet.getRange(i + 1, 2).setValue(mapping[label]);
+      }
+    }
 
     return { ok: true, message: "Configuration enregistrée avec succès." };
   } catch (e) {
@@ -143,34 +147,58 @@ function saveSidebarConfig(formData) {
 }
 
 /**
- * Déclenche l'analyse des CVs depuis le bouton de la Sidebar.
+ * Déclenche l'analyse des CVs de façon asynchrone non-bloquante depuis la Sidebar.
+ * @param {Object} formData
  * @returns {{ok: boolean, message: string}}
  */
-function startAnalysisFromSidebar() {
+function startAnalysisFromSidebar(formData) {
   try {
-    // Initialise l'état du job
+    // 1. Sauvegarder d'abord la configuration soumise par l'utilisateur
+    if (formData) {
+      const saveRes = saveSidebarConfig(formData);
+      if (!saveRes.ok) return saveRes;
+    }
+
+    // 2. Vérifier la clé API
+    const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+    if (!apiKey) {
+      return { ok: false, message: "Clé API non configurée. Utilisez le menu pour configurer votre clé." };
+    }
+
+    // 3. Initialiser l'état du job
     _updateProgressState({
       status: "RUNNING",
       total: 0,
       processed: 0,
       successCount: 0,
       errorCount: 0,
-      currentFileName: "Initialisation...",
-      recentCandidates: [],
-      lastUpdated: Date.now()
+      currentFileName: "Démarrage du traitement en arrière-plan...",
+      recentCandidates: []
     });
 
-    // Lancer l'analyse en mode non-interactif
-    _runAnalysis({ interactive: false });
-    return { ok: true, message: "Traitement lancé." };
+    // 4. Lancement asynchrone via déclencheur à +1 seconde (libère immédiatement le client)
+    _scheduleImmediateAnalysisTrigger();
+
+    return { ok: true, message: "Analyse démarrée avec succès." };
   } catch (e) {
     _updateProgressState({
       status: "ERROR",
-      errorMessage: e.message,
-      lastUpdated: Date.now()
+      errorMessage: e.message
     });
     return { ok: false, message: e.message };
   }
+}
+
+/**
+ * Programme un déclencheur d'exécution quasi-immédiat (+1 seconde).
+ * @private
+ */
+function _scheduleImmediateAnalysisTrigger() {
+  _cleanupContinuationTriggers();
+  ScriptApp.newTrigger(CONTINUATION_TRIGGER_HANDLER)
+    .timeBased()
+    .after(1000)
+    .create();
 }
 
 /**
@@ -180,7 +208,7 @@ function startAnalysisFromSidebar() {
 function getAnalysisProgress() {
   const rawState = PropertiesService.getScriptProperties().getProperty(PROP_KEY_JOB_STATE);
   if (!rawState) {
-    return { status: "IDLE", total: 0, processed: 0, successCount: 0, errorCount: 0 };
+    return { status: "IDLE", total: 0, processed: 0, successCount: 0, errorCount: 0, lastUpdated: Date.now() };
   }
   try {
     return JSON.parse(rawState);
@@ -220,7 +248,7 @@ function getSelectedCandidateDetails() {
 }
 
 /**
- * Génère un brouillon d'email Gmail pour un seul candidat spécifié.
+ * Génère un brouillon d'email Gmail pour un seul candidat spécifié en utilisant la logique partagée d'EmailService.
  * @param {number} rowNumber
  * @returns {{ok: boolean, message: string}}
  */
@@ -241,35 +269,7 @@ function draftSingleCandidateEmail(rowNumber) {
 
   if (!apiKey) return { ok: false, message: "Clé API non configurée." };
 
-  const isAccepted = candidate.recommendation === "À contacter";
-  const firstName = (!candidate.name || candidate.name === "Inconnu") ? "" : (candidate.name.split(' ')[0] || candidate.name);
-  const greeting = firstName ? `Bonjour ${firstName},` : "Bonjour,";
-
-  const prompt = `Agis comme un recruteur bienveillant et professionnel.
-Rédige un email très court et poli à l'intention du candidat.
-Contexte : Le candidat a postulé à une de nos offres.
-Décision : ${isAccepted ? "Nous souhaitons le contacter pour un entretien." : "Nous ne retenons pas sa candidature pour ce poste."}
-Ses points forts (à mentionner brièvement s'ils sont pertinents) : ${candidate.strengths}
-Raisons du refus (si refus) ou points à creuser (si accepté) : ${candidate.weaknesses}
-Rédige uniquement le corps de l'email (pas d'objet, pas de placeholders pour ma signature). Commence directement par '${greeting}'`;
-
-  try {
-    const payload = {
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.4 }
-    };
-    const responseText = callGeminiAPI(model, payload, apiKey);
-    const json = JSON.parse(responseText);
-    if (json.candidates && json.candidates[0]) {
-      const emailBody = json.candidates[0].content.parts[0].text;
-      const subject = isAccepted ? `Suite à votre candidature - Échange téléphonique` : `Suite à votre candidature`;
-      GmailApp.createDraft(candidate.email, subject, emailBody);
-      return { ok: true, message: `Brouillon Gmail créé pour ${candidate.name}.` };
-    }
-  } catch (e) {
-    return { ok: false, message: "Erreur génération email : " + e.message };
-  }
-  return { ok: false, message: "Impossible de générer le brouillon." };
+  return _createCandidateDraft(candidate, apiKey, model);
 }
 
 /**
