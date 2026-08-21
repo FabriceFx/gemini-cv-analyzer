@@ -160,6 +160,17 @@ function startAnalysisFromSidebar(formData) {
     }
     lock.releaseLock();
 
+    // Vérifier également si l'état stocké indique un traitement actif récent (anti-double clic)
+    const rawState = PropertiesService.getScriptProperties().getProperty(PROP_KEY_JOB_STATE);
+    if (rawState) {
+      try {
+        const parsed = JSON.parse(rawState);
+        if (parsed && (parsed.status === "RUNNING" || parsed.status === "CONTINUING") && (Date.now() - (parsed.lastUpdated || 0) < 15 * 60 * 1000)) {
+          return { ok: false, message: "Une analyse est déjà en cours d'exécution. Veuillez patienter." };
+        }
+      } catch (e) { }
+    }
+
     // 2. Sauvegarder d'abord la configuration soumise par l'utilisateur
     if (formData) {
       const saveRes = saveSidebarConfig(formData);

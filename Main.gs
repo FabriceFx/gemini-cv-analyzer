@@ -15,7 +15,6 @@ function analyzeCVsAutomated() {
  * Handler appelé par le déclencheur de reprise automatique (contournement de la limite des 6 min).
  */
 function _resumeAnalysisTrigger() {
-  _cleanupContinuationTriggers();
   let savedSource = 'automated';
   const rawState = PropertiesService.getScriptProperties().getProperty(PROP_KEY_JOB_STATE);
   if (rawState) {
@@ -43,16 +42,30 @@ function _notifyAutomatedFailure(reason) {
  * Gère le découpage en sous-lots, les pauses de quota et la reprise automatique anti-timeout.
  */
 function _runAnalysis(options) {
-  const isInteractive = options && options.interactive;
-  const isContinuation = options && options.isContinuation;
+  const isInteractive = Boolean(options && options.interactive);
+  const isContinuation = Boolean(options && options.isContinuation);
+  const canUseUi = isInteractive && !isContinuation;
   const source = (options && options.source) || (isInteractive ? 'interactive' : 'automated');
+  const notifyByEmail = source === 'automated' || (source === 'interactive' && isContinuation);
   const lock = LockService.getScriptLock();
   
   if (!lock.tryLock(5000)) {
-    if (source === 'interactive') {
+    if (canUseUi) {
       SpreadsheetApp.getActiveSpreadsheet().toast("Une analyse est déjà en cours, veuillez patienter.", "⏳");
     } else if (source === 'sidebar') {
-      _updateProgressState({ status: "BUSY", errorMessage: "Une analyse est déjà en cours d'exécution." });
+      const rawState = PropertiesService.getScriptProperties().getProperty(PROP_KEY_JOB_STATE);
+      let isAlreadyRunning = false;
+      if (rawState) {
+        try {
+          const parsed = JSON.parse(rawState);
+          if (parsed && (parsed.status === 'RUNNING' || parsed.status === 'CONTINUING') && (Date.now() - (parsed.lastUpdated || 0) < 15 * 60 * 1000)) {
+            isAlreadyRunning = true;
+          }
+        } catch (e) { }
+      }
+      if (!isAlreadyRunning) {
+        _updateProgressState({ status: "BUSY", errorMessage: "Une analyse est déjà en cours d'exécution." });
+      }
     }
     return;
   }
@@ -67,9 +80,9 @@ function _runAnalysis(options) {
 
     if (!configSheet || !resultsSheet) {
       const errMsg = "Les feuilles Configuration et Résultats sont introuvables.";
-      if (source === 'interactive') {
+      if (canUseUi) {
         SpreadsheetApp.getUi().alert("Erreur : veuillez d'abord initialiser les feuilles via le menu '⚙️ Initialiser / Réinitialiser les feuilles'.");
-      } else if (source === 'automated') {
+      } else if (notifyByEmail) {
         _notifyAutomatedFailure(errMsg);
       }
       _updateProgressState({ status: "ERROR", errorMessage: errMsg });
@@ -81,11 +94,11 @@ function _runAnalysis(options) {
 
     let commonConfig;
     try {
-      commonConfig = _prepareCommonConfig(configSheet, isInteractive);
+      commonConfig = _prepareCommonConfig(configSheet, canUseUi);
     } catch (e) {
-      if (source === 'interactive') {
+      if (canUseUi) {
         SpreadsheetApp.getUi().alert(`Configuration requise : ${e.message}`);
-      } else if (source === 'automated') {
+      } else if (notifyByEmail) {
         _notifyAutomatedFailure(`Configuration incomplète : ${e.message}`);
       }
       _updateProgressState({ status: "ERROR", errorMessage: e.message });
@@ -97,9 +110,9 @@ function _runAnalysis(options) {
     const folderUrl = (config['URL du dossier Drive contenant les CVs'] || '').toString().trim();
     if (!folderUrl) {
       const errMsg = "L'URL du dossier Drive configurée est manquante.";
-      if (source === 'interactive') {
+      if (canUseUi) {
         SpreadsheetApp.getUi().alert("Erreur de configuration : l'URL du dossier Drive est manquante.");
-      } else if (source === 'automated') {
+      } else if (notifyByEmail) {
         _notifyAutomatedFailure(errMsg);
       }
       _updateProgressState({ status: "ERROR", errorMessage: errMsg });
@@ -115,9 +128,9 @@ function _runAnalysis(options) {
     const folderId = getFolderIdFromUrl(folderUrl);
     if (!folderId) {
       const errMsg = "L'URL du dossier Drive configurée est invalide.";
-      if (source === 'interactive') {
+      if (canUseUi) {
         SpreadsheetApp.getUi().alert("Erreur de configuration : l'URL du dossier Drive semble invalide.");
-      } else if (source === 'automated') {
+      } else if (notifyByEmail) {
         _notifyAutomatedFailure(errMsg);
       }
       _updateProgressState({ status: "ERROR", errorMessage: errMsg });
@@ -130,9 +143,9 @@ function _runAnalysis(options) {
       folder = DriveApp.getFolderById(folderId);
     } catch (e) {
       const errMsg = `Impossible d'accéder au dossier Drive : ${e.message}`;
-      if (source === 'interactive') {
+      if (canUseUi) {
         SpreadsheetApp.getUi().alert(`Erreur d'accès Drive : ${e.message}`);
-      } else if (source === 'automated') {
+      } else if (notifyByEmail) {
         _notifyAutomatedFailure(errMsg);
       }
       _updateProgressState({ status: "ERROR", errorMessage: errMsg });
@@ -171,11 +184,12 @@ function _runAnalysis(options) {
     const totalFilesCount = filesToProcess.length + alreadyProcessedCount;
 
     if (filesToProcess.length === 0) {
-      if (source === 'interactive') {
+      if (canUseUi) {
         SpreadsheetApp.getUi().alert("Aucun nouveau document à analyser. (PDF, Google Doc ou DOCX)");
       }
       _updateProgressState({
         status: "COMPLETED",
+        source: source,
         total: totalFilesCount,
         processed: totalFilesCount,
         currentFileName: "Tous les documents sont à jour"
@@ -184,8 +198,8 @@ function _runAnalysis(options) {
       return;
     }
 
-    // Confirmation uniquement en interactif classique
-    if (source === 'interactive' && !isContinuation) {
+    // Confirmation uniquement en interactif classique (pas en reprise)
+    if (canUseUi) {
       const ui = SpreadsheetApp.getUi();
       const costResponse = ui.alert(
         "Confirmation",
@@ -216,7 +230,7 @@ function _runAnalysis(options) {
     // Tentative de Context Caching si lot important
     let cacheName = null;
     if (filesToProcess.length >= 5) {
-      if (source === 'interactive') ss.toast("Vérification du cache de contexte...", "Cache 🧠");
+      if (canUseUi) ss.toast("Vérification du cache de contexte...", "Cache 🧠");
       cacheName = createGeminiCache(apiKey, model, systemPrompt, jobDescription, criteria);
     }
 
@@ -236,9 +250,10 @@ function _runAnalysis(options) {
           _scheduleContinuationTrigger();
           _updateProgressState({
             status: "CONTINUING",
+            source: source,
             currentFileName: "Reprise automatique programmée dans 1 min..."
           });
-          if (source === 'interactive') {
+          if (canUseUi) {
             ss.toast("Temps limite approché. Reprise automatique à +1 min.", "Reprise ⏳", 8);
           }
           stoppedByTimeout = true;
@@ -247,12 +262,13 @@ function _runAnalysis(options) {
       }
 
       const batch = filesToProcess.slice(batchStart, batchStart + batchSize);
-      if (source === 'interactive') {
+      if (canUseUi) {
         ss.toast(`Traitement du lot ${Math.floor(batchStart / batchSize) + 1} (${batch.length} document${batch.length > 1 ? 's' : ''})...`, "Analyse 🔍");
       }
 
       _updateProgressState({
         status: "RUNNING",
+        source: source,
         total: totalFilesCount,
         processed: alreadyProcessedCount + successCount + errorCount,
         currentFileName: batch[0].getName()
@@ -328,6 +344,7 @@ function _runAnalysis(options) {
       // Mise à jour de la progression en direct
       _updateProgressState({
         status: "RUNNING",
+        source: source,
         total: totalFilesCount,
         processed: alreadyProcessedCount + successCount + errorCount,
         successCount: successCount,
@@ -342,6 +359,7 @@ function _runAnalysis(options) {
           _scheduleContinuationTrigger();
           _updateProgressState({
             status: "CONTINUING",
+            source: source,
             currentFileName: "Reprise automatique au prochain lot (+1 min)..."
           });
           stoppedByTimeout = true;
@@ -375,7 +393,7 @@ function _runAnalysis(options) {
         
         if (summaryList.length > 0) {
           try {
-            if (source === 'interactive') ss.toast("Génération de la synthèse...", "Synthèse 🧠", 10);
+            if (canUseUi) ss.toast("Génération de la synthèse...", "Synthèse 🧠", 10);
             const sessionSynthesis = generateSessionSynthesis(summaryList.join("\n"), jobDescription, apiKey, model);
             resultsSheet.getRange("A2").setValue(`Synthèse globale : ${sessionSynthesis}`);
           } catch (synthErr) {
@@ -386,6 +404,7 @@ function _runAnalysis(options) {
 
       _updateProgressState({
         status: "COMPLETED",
+        source: source,
         total: totalFilesCount,
         processed: totalFilesCount,
         successCount: successCount,
@@ -401,9 +420,9 @@ function _runAnalysis(options) {
       }
       if (errorCount > 0) endMessage += `\n⚠️ ${errorCount} fichier(s) en erreur (pourront être réanalysés).`;
       
-      if (source === 'interactive') {
+      if (canUseUi) {
         SpreadsheetApp.getUi().alert(`Bilan : ${endMessage}`);
-      } else if (source === 'automated') {
+      } else if (notifyByEmail) {
         const userEmail = Session.getEffectiveUser().getEmail() || Session.getActiveUser().getEmail();
         if (userEmail) {
           MailApp.sendEmail({
@@ -419,12 +438,13 @@ function _runAnalysis(options) {
     Logger.log("Erreur globale _runAnalysis : " + err.message);
     _updateProgressState({
       status: "ERROR",
+      source: source,
       errorMessage: err.message
     });
-    if (source === 'automated') {
-      _notifyAutomatedFailure(err.message);
-    } else if (source === 'interactive') {
+    if (canUseUi) {
       SpreadsheetApp.getUi().alert(`Erreur : ${err.message}`);
+    } else if (notifyByEmail) {
+      _notifyAutomatedFailure(err.message);
     }
     _cleanupContinuationTriggers();
     throw err;
@@ -556,7 +576,7 @@ function clearResults() {
       sheet.deleteRows(4, lastRow - 3);
     }
     sheet.getRange("A2").setValue("Synthèse globale : En attente du lancement de l'analyse pour générer les conseils de session...");
-    _updateProgressState({ status: "IDLE", total: 0, processed: 0, currentFileName: "" });
+    _updateProgressState({ status: "IDLE", source: "interactive", total: 0, processed: 0, currentFileName: "" });
     ss.toast("Le tableau des résultats a été réinitialisé.", "Vidé 🧹");
   }
 }
@@ -725,10 +745,10 @@ function _scheduleWatchdogTrigger() {
 /**
  * Prépare la configuration et valide les paramètres communs.
  * @param {GoogleAppsScript.Spreadsheet.Sheet} configSheet
- * @param {boolean} isInteractive
+ * @param {boolean} canUseUi
  * @returns {{apiKey: string, jobDescription: string, model: string, criteria: string, systemPrompt: string, config: Object}}
  */
-function _prepareCommonConfig(configSheet, isInteractive) {
+function _prepareCommonConfig(configSheet, canUseUi) {
   const config = getConfig(configSheet);
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
   const annonceInput = (config["URL ou texte de l'annonce"] || '').toString().trim();
@@ -745,7 +765,7 @@ function _prepareCommonConfig(configSheet, isInteractive) {
 
   let jobDescription = annonceInput;
   if (annonceInput.startsWith("http://") || annonceInput.startsWith("https://")) {
-    if (isInteractive) SpreadsheetApp.getActiveSpreadsheet().toast("Chargement de l'annonce...", "Annonce 📄");
+    if (canUseUi) SpreadsheetApp.getActiveSpreadsheet().toast("Chargement de l'annonce...", "Annonce 📄");
     const allowedDomainsStr = (config['Domaines autorisés'] || DEFAULT_ALLOWED_DOMAINS.join(", ")).toString().trim();
     jobDescription = extractJobDescriptionWithGemini(fetchJobDescription(annonceInput, allowedDomainsStr), apiKey, model);
   }
@@ -754,7 +774,7 @@ function _prepareCommonConfig(configSheet, isInteractive) {
   if (rawSystemPrompt.includes('{{JOB_DESCRIPTION}}') && rawSystemPrompt.includes('{{CRITERIA}}')) {
     systemPrompt = rawSystemPrompt;
   } else if (rawSystemPrompt !== "") {
-    if (isInteractive) SpreadsheetApp.getActiveSpreadsheet().toast("Prompt personnalisé invalide. Utilisation du prompt par défaut.", "⚠️ Attention");
+    if (canUseUi) SpreadsheetApp.getActiveSpreadsheet().toast("Prompt personnalisé invalide. Utilisation du prompt par défaut.", "⚠️ Attention");
   }
 
   return { apiKey, jobDescription, model, criteria, systemPrompt, config };
