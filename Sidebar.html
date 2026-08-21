@@ -709,7 +709,16 @@
         .withSuccessHandler(state => {
           updateJobDisplay(state);
           if (state) {
-            // Détection état périmé (> 15 min sans mise à jour)
+            // Détection état SCHEDULED périmé (> 3 min sans démarrage du trigger)
+            if (state.status === 'SCHEDULED' && state.lastUpdated && (Date.now() - state.lastUpdated > 3 * 60 * 1000)) {
+              state.status = 'ERROR';
+              state.errorMessage = 'Le déclencheur a tardé à démarrer. Vous pouvez relancer ou réinitialiser.';
+              updateJobDisplay(state);
+              stopPolling();
+              return;
+            }
+
+            // Détection état RUNNING périmé (> 15 min sans mise à jour)
             if (state.status === 'RUNNING' && state.lastUpdated && (Date.now() - state.lastUpdated > 15 * 60 * 1000)) {
               state.status = 'ERROR';
               state.errorMessage = 'Traitement interrompu (délai dépassé)';
@@ -814,24 +823,6 @@
         bar.className = 'progress-bar';
         continuationNotice.style.display = 'none';
       }
-    }
-
-    function resetStateManually() {
-      google.script.run
-        .withSuccessHandler(res => {
-          if (res && res.ok) {
-            showToast(res.message, "success");
-            stopPolling();
-            loadInitialData();
-          } else {
-            showToast(res ? res.message : "Erreur réinitialisation", "error");
-          }
-        })
-        .withFailureHandler(err => {
-          showToast("Erreur : " + err.message, "error");
-        })
-        .resetJobProgressState();
-    }
 
       // Rendu 100% sécurisé de la liste des candidats récents (sans innerHTML)
       if (state.recentCandidates && state.recentCandidates.length > 0) {
@@ -866,6 +857,23 @@
           liveList.appendChild(item);
         });
       }
+    }
+
+    function resetStateManually() {
+      google.script.run
+        .withSuccessHandler(res => {
+          if (res && res.ok) {
+            showToast(res.message, "success");
+            stopPolling();
+            loadInitialData();
+          } else {
+            showToast(res ? res.message : "Erreur réinitialisation", "error");
+          }
+        })
+        .withFailureHandler(err => {
+          showToast("Erreur : " + err.message, "error");
+        })
+        .resetJobProgressState();
     }
   </script>
 </body>

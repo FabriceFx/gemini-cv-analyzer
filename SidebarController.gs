@@ -218,6 +218,12 @@ function startAnalysisFromSidebar(formData) {
  */
 function resetJobProgressState() {
   try {
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(0)) {
+      return { ok: false, message: "Une analyse est réellement en cours d'exécution. Le déblocage n'est pas nécessaire." };
+    }
+    lock.releaseLock();
+
     _cleanupContinuationTriggers();
     _updateProgressState({
       status: "IDLE",
