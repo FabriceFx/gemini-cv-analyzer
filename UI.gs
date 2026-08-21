@@ -38,8 +38,8 @@ function setupSheets() {
 
   // Confirmation explicite avant réinitialisation
   const confirm = ui.alert(
-    "⚠️ Réinitialisation des feuilles",
-    "Cette action va initialiser ou réinitialiser la structure des feuilles Configuration et Résultats de l'analyse.\n\nSouhaitez-vous continuer ?",
+    "⚠️ Attention : Réinitialisation des feuilles",
+    "Cette action va réinitialiser la configuration ET effacer toutes les lignes de résultats d'analyse existantes.\n\nSouhaitez-vous vraiment continuer ?",
     ui.ButtonSet.YES_NO
   );
   if (confirm !== ui.Button.YES) return;

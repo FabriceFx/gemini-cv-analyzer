@@ -103,7 +103,7 @@ function computeContactRecommendations(candidates, maxContact = MAX_CONTACT_CAND
  */
 function fetchJobDescription(url, allowedDomainsStr) {
   try {
-    const match = url.match(/^https?:\/\/(?:www\.)?([^\/:]+)/i);
+    const match = url.match(/^https?:\/\/(?:www\.)?([^\/:?#@]+)/i);
     if (!match) throw new Error("Format d'URL invalide.");
     const domain = match[1].toLowerCase();
 
@@ -118,6 +118,7 @@ function fetchJobDescription(url, allowedDomainsStr) {
 
   const response = UrlFetchApp.fetch(url, {
     muteHttpExceptions: false,
+    followRedirects: false,
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     },

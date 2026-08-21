@@ -87,6 +87,32 @@ function extractJobDescriptionWithGemini(rawText, apiKey, model) {
 }
 
 /**
+ * Convertit un fichier DOCX en Blob PDF via le service avancé Drive.
+ * @param {GoogleAppsScript.Drive.File} file
+ * @returns {GoogleAppsScript.Base.Blob}
+ */
+function _convertDocxToPdfBlob(file) {
+  if (typeof Drive !== 'undefined' && Drive.Files && Drive.Files.copy) {
+    const copy = Drive.Files.copy(
+      { title: `tmp_${file.getName()}` },
+      file.getId(),
+      { convert: true }
+    );
+    try {
+      const tempDoc = DriveApp.getFileById(copy.id);
+      return tempDoc.getAs(MimeType.PDF);
+    } finally {
+      try {
+        Drive.Files.remove(copy.id);
+      } catch (delErr) {
+        try { DriveApp.getFileById(copy.id).setTrashed(true); } catch (e) { }
+      }
+    }
+  }
+  throw new Error(`Le service Drive avancé n'est pas disponible pour convertir "${file.getName()}". Veuillez l'enregistrer en PDF.`);
+}
+
+/**
  * Lit et prépare un fichier Drive pour l'envoi à Gemini (supporte les PDF jusqu'à 20 Mo).
  * @returns {{file, mimeType, base64Data}}
  */
@@ -101,13 +127,16 @@ function _prepareDocumentEntry(file) {
 
   let blob, mimeType;
   try {
-    blob = file.getBlob();
     mimeType = file.getMimeType();
     
-    // Conversion en PDF si Google Docs ou DOCX/Word
-    if (mimeType === MimeType.GOOGLE_DOCS || mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || mimeType === "application/msword") {
-      blob = blob.getAs(MimeType.PDF);
+    if (mimeType === MimeType.GOOGLE_DOCS) {
+      blob = file.getBlob().getAs(MimeType.PDF);
       mimeType = MimeType.PDF;
+    } else if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+      blob = _convertDocxToPdfBlob(file);
+      mimeType = MimeType.PDF;
+    } else {
+      blob = file.getBlob();
     }
   } catch (e) {
     throw new Error(`Impossible de lire ou convertir "${file.getName()}". Détail : ${e.message}`);
@@ -210,7 +239,8 @@ function analyzeDocumentsBatch(files, apiKey, model, jobDescription, criteria, s
   }
 
   const results = [...prepErrors];
-  for (const subBatch of subBatches) {
+  for (let batchIdx = 0; batchIdx < subBatches.length; batchIdx++) {
+    const subBatch = subBatches[batchIdx];
     const requests = subBatch.map(entry => ({
       url,
       method: "post",
@@ -250,7 +280,7 @@ function analyzeDocumentsBatch(files, apiKey, model, jobDescription, criteria, s
       }
     });
 
-    if (subBatches.length > 1) {
+    if (batchIdx < subBatches.length - 1) {
       Utilities.sleep(1000);
     }
   }

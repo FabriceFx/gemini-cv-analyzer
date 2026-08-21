@@ -120,7 +120,7 @@ function purgeOldCVs() {
 
 /**
  * Remplace les données identifiantes par 'Pseudonymisé' pour plusieurs fichiers de manière optimisée et ciblée.
- * Ne modifie que les colonnes A, B, C et K pour préserver les formules et formats des autres colonnes.
+ * Ne modifie que les colonnes A, B, C et la cellule Fichier CV des seules lignes purgées, afin de préserver intacts les liens RichText des autres candidats.
  */
 function anonymizeResultsRowsBulk(sheet, idsDict) {
   const lastRow = sheet.getLastRow();
@@ -129,7 +129,6 @@ function anonymizeResultsRowsBulk(sheet, idsDict) {
   const numRows = lastRow - 3;
   const idValues = sheet.getRange(4, COL_INDEX.FILE_ID, numRows, 1).getValues();
   const identData = sheet.getRange(4, 1, numRows, 3).getValues(); // Colonnes A (Nom), B (Email), C (Téléphone)
-  const fileData = sheet.getRange(4, COL_INDEX.FILE_LINK, numRows, 1).getValues(); // Colonne K (Lien Fichier)
 
   let modified = false;
   for (let i = 0; i < numRows; i++) {
@@ -138,14 +137,13 @@ function anonymizeResultsRowsBulk(sheet, idsDict) {
       identData[i][0] = "Pseudonymisé"; // Candidat (A)
       identData[i][1] = "Pseudonymisé"; // Email (B)
       identData[i][2] = "Pseudonymisé"; // Téléphone (C)
-      fileData[i][0] = "Document purgé"; // Fichier CV (K)
+      sheet.getRange(4 + i, COL_INDEX.FILE_LINK).setValue("Document purgé");
       modified = true;
     }
   }
   
   if (modified) {
     sheet.getRange(4, 1, numRows, 3).setValues(identData);
-    sheet.getRange(4, COL_INDEX.FILE_LINK, numRows, 1).setValues(fileData);
   }
 }
 

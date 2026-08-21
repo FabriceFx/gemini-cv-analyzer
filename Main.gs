@@ -142,6 +142,9 @@ function _runAnalysis(options) {
       ss.toast(`Début de l'analyse : ${filesToProcess.length} document${filesToProcess.length > 1 ? 's' : ''} détecté${filesToProcess.length > 1 ? 's' : ''}.`, "Lancement 🚀");
     }
 
+    // Nettoyage des anciennes lignes Erreur pour les fichiers qui vont être réanalysés
+    _removeOrphanErrorRows(resultsSheet, filesToProcess.map(f => f.getId()));
+
     // Tentative de Context Caching si lot important
     let cacheName = null;
     if (filesToProcess.length >= 5) {
@@ -353,6 +356,7 @@ function analyzeSingleCV() {
         new Date(),
         file.getId()
       ];
+      _removeOrphanErrorRows(resultsSheet, [fileId]);
       _appendBatchResults(resultsSheet, [row], [{ name: file.getName(), url: file.getUrl() }], []);
 
       ui.alert(`Analyse réussie pour : ${analysis.candidateName}\nRecommandation: ${analysis.recommendation}\nNote: ${analysis.score}/5`);
@@ -361,6 +365,7 @@ function analyzeSingleCV() {
       const errorRow = [
         "Erreur d'analyse", "", "", "", "", "", `Une erreur s'est produite : ${err.message}`, "", "Erreur", 0, file.getName(), new Date(), file.getId()
       ];
+      _removeOrphanErrorRows(resultsSheet, [fileId]);
       _appendBatchResults(resultsSheet, [errorRow], [{ name: file.getName(), url: file.getUrl() }], [0]);
     }
   } finally {
@@ -403,17 +408,47 @@ function clearResults() {
 }
 
 /**
+ * Supprime les anciennes lignes en statut 'Erreur' pour les fichiers qui vont être réanalysés,
+ * afin d'éviter l'accumulation de doublons d'erreur dans la feuille des résultats.
+ * 
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} resultsSheet
+ * @param {string[]} fileIdsToProcess
+ */
+function _removeOrphanErrorRows(resultsSheet, fileIdsToProcess) {
+  const lastRow = resultsSheet.getLastRow();
+  if (lastRow < 4 || !fileIdsToProcess || fileIdsToProcess.length === 0) return;
+  
+  const numRows = lastRow - 3;
+  const data = resultsSheet.getRange(4, 1, numRows, 13).getValues();
+  const fileIdSet = {};
+  fileIdsToProcess.forEach(id => { fileIdSet[id] = true; });
+
+  // Parcourir du bas vers le haut pour supprimer les lignes sans décaler les indices
+  for (let i = numRows - 1; i >= 0; i--) {
+    const reco = (data[i][COL_INDEX.RECOMMENDATION - 1] || '').toString().trim();
+    const id = (data[i][COL_INDEX.FILE_ID - 1] || '').toString().trim();
+    if (reco === "Erreur" && fileIdSet[id]) {
+      resultsSheet.deleteRow(4 + i);
+    }
+  }
+}
+
+/**
  * Écrit un lot de résultats dans la feuille et applique le formatage en une seule opération groupée.
  */
 function _appendBatchResults(resultsSheet, rows, richTextLinks, errorIndices) {
   const startRow = resultsSheet.getLastRow() + 1;
   const numRows = rows.length;
   
+  // 1. Appliquer le format texte sur la colonne téléphone AVANT d'insérer les valeurs
+  resultsSheet.getRange(startRow, COL_INDEX.PHONE, numRows, 1).setNumberFormat("@");
+
+  // 2. Écrire les données du lot
   const range = resultsSheet.getRange(startRow, 1, numRows, 13);
   range.setValues(rows);
   range.setVerticalAlignment("top").setWrap(true).setFontFamily("Inter");
 
-  // Formatage des liens RichText pour les fichiers
+  // 3. Formatage des liens RichText pour les fichiers
   const richTextValues = richTextLinks.map(link => [
     SpreadsheetApp.newRichTextValue().setText(link.name).setLinkUrl(link.url).build()
   ]);
@@ -431,6 +466,9 @@ function _appendBatchResults(resultsSheet, rows, richTextLinks, errorIndices) {
       resultsSheet.getRange(startRow + idx, 1, 1, 13).setFontColor("#dc2626");
     });
   }
+
+  // 4. Forcer la synchronisation avec la feuille
+  SpreadsheetApp.flush();
 }
 
 /**

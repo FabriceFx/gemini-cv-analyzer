@@ -152,4 +152,27 @@ function testIsDomainAllowed() {
     }
   }
   Logger.log(`Tests domaines terminés: ${passed}/${testCases.length} réussis.`);
+
+  // Test de l'extraction regex anti-contournement
+  const urlTestCases = [
+    { url: "https://evil.example?x=.linkedin.com", expectedAllowed: false },
+    { url: "https://evil.example#linkedin.com", expectedAllowed: false },
+    { url: "https://user@evil.example/path", expectedAllowed: false },
+    { url: "https://www.linkedin.com/jobs/view/123456", expectedAllowed: true },
+    { url: "https://pole-emploi.fr/candidat/offre/123", expectedAllowed: true }
+  ];
+
+  let urlPassed = 0;
+  for (const tc of urlTestCases) {
+    const match = tc.url.match(/^https?:\/\/(?:www\.)?([^\/:?#@]+)/i);
+    const domain = match ? match[1].toLowerCase() : "";
+    const allowedResult = isDomainAllowed(domain, allowed);
+    if (allowedResult === tc.expectedAllowed) {
+      urlPassed++;
+      Logger.log(`✅ PASS (URL check): ${tc.url} -> domaine: "${domain}" -> autorisé: ${allowedResult}`);
+    } else {
+      Logger.log(`❌ FAIL (URL check): ${tc.url} -> domaine: "${domain}" -> Attendu: ${tc.expectedAllowed}, Obtenu: ${allowedResult}`);
+    }
+  }
+  Logger.log(`Tests URLs terminés: ${urlPassed}/${urlTestCases.length} réussis.`);
 }

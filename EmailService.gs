@@ -90,13 +90,16 @@ function draftEmailsForCandidates() {
     }
 
     const isAccepted = recommendation === "À contacter";
+    const firstName = (!candidateName || candidateName === "Inconnu") ? "" : (candidateName.split(' ')[0] || candidateName);
+    const greeting = firstName ? `Bonjour ${firstName},` : "Bonjour,";
+
     const prompt = `Agis comme un recruteur bienveillant et professionnel.
-Rédige un email très court et poli à l'intention de "${candidateName}".
+Rédige un email très court et poli à l'intention du candidat.
 Contexte : Le candidat a postulé à une de nos offres.
 Décision : ${isAccepted ? "Nous souhaitons le contacter pour un entretien." : "Nous ne retenons pas sa candidature pour ce poste."}
 Ses points forts (à mentionner brièvement s'ils sont pertinents) : ${strengths}
 Raisons du refus (si refus) ou points à creuser (si accepté) : ${weaknesses}
-Rédige uniquement le corps de l'email (pas d'objet, pas de placeholders pour ma signature). Commence directement par 'Bonjour ${candidateName.split(' ')[0] || candidateName},'`;
+Rédige uniquement le corps de l'email (pas d'objet, pas de placeholders pour ma signature). Commence directement par '${greeting}'`;
 
     let emailBody = "";
     try {
