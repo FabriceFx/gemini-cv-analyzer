@@ -4,6 +4,10 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 Ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/). Les
 versions antérieures à la 1.0.0 n'étaient pas numérotées.
 
+## [1.0.4] - 2026-09-28
+
+- Casse typographique : suppression des majuscules à l'anglaise (« Title Case ») dans l'interface du panneau pour suivre la règle française.
+
 ## [1.0.3] - 2026-09-28
 
 ### Corrigé
