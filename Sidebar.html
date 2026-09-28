@@ -292,6 +292,7 @@
 
     /* Aides, grille, sélection */
     .hint { font-size: 10.5px; color: var(--text-muted); margin-top: 3px; line-height: 1.4; }
+    .hint.warn { color: var(--warning); }
     .grid-summary { font-size: 11px; color: #334155; background: var(--surface-variant); border-radius: var(--radius-sm); padding: 6px 8px; margin-bottom: 8px; }
     .grid-summary.warn { background: var(--warning-bg); color: #92400e; }
     .grid-summary.error { background: var(--danger-bg); color: var(--danger); }
@@ -384,7 +385,7 @@
             <select id="modelSelect">
               <option value="gemini-3.7-flash">gemini-3.7-flash (Recommandé)</option>
             </select>
-            <p class="hint">Changer de modèle fait réanalyser les CV : des évaluations de deux modèles ne se comparent pas.</p>
+            <p id="modelSourceHint" class="hint">Changer de modèle fait réanalyser les CV : des évaluations de deux modèles ne se comparent pas.</p>
           </div>
           <div class="form-group">
             <label for="accountTypeSelect">Type de compte Gemini</label>
@@ -548,11 +549,19 @@
       loadInitialData();
     });
 
+    let minuterieToast = null;
+
+    // Le masquage passe par la classe, jamais par un style en ligne : un
+    // « display: none » posé sur l'élément l'emportait sur la classe suivante,
+    // et plus aucun message — erreurs comprises — ne s'affichait après le premier.
     function showToast(msg, type = 'info', duree = 4000) {
       const el = document.getElementById('toastMessage');
       el.textContent = msg;
       el.className = `toast ${type}`;
-      setTimeout(() => { el.style.display = 'none'; }, duree);
+      // Le bandeau est en haut du panneau : on le ramène à la vue, sinon une erreur passe inaperçue.
+      if (el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      if (minuterieToast) clearTimeout(minuterieToast);
+      minuterieToast = setTimeout(() => { el.className = 'toast'; }, duree);
     }
 
     function switchTab(tabId) {
@@ -579,10 +588,8 @@
             document.getElementById('appFooter').textContent = `Analyseur de CV v${data.version} · Fabrice Faucheux — faucheux.bzh`;
           }
 
-          // Remplissage dynamique des modèles
-          if (data.availableModels && data.availableModels.length > 0) {
-            populateModelSelect(data.availableModels, data.config ? data.config.model : 'gemini-3.7-flash');
-          }
+          // Remplissage dynamique des modèles, depuis la liste de Google
+          if (data.modeles) populateModelSelect(data.modeles);
 
           // Remplissage formulaire
           if (data.config) {
@@ -636,16 +643,31 @@
       el.className = 'grid-summary';
     }
 
-    function populateModelSelect(models, selectedModel) {
+    // Le modèle enregistré reste sélectionné même s'il a disparu de la liste :
+    // en changer fait réanalyser les CV, ce n'est pas au panneau de le décider.
+    function populateModelSelect(modeles) {
       const select = document.getElementById('modelSelect');
       select.innerHTML = '';
-      models.forEach(m => {
+      const liste = [...modeles.liste];
+      if (modeles.choisi && !liste.includes(modeles.choisi)) liste.unshift(modeles.choisi);
+      liste.forEach(m => {
         const opt = document.createElement('option');
         opt.value = m;
-        opt.textContent = m === 'gemini-3.7-flash' ? `${m} (Recommandé)` : m;
-        if (m === selectedModel) opt.selected = true;
+        opt.textContent = m === modeles.choisi && modeles.retire ? `${m} (n'est plus proposé par Google)` : m;
+        if (m === modeles.choisi) opt.selected = true;
         select.appendChild(opt);
       });
+      const aide = document.getElementById('modelSourceHint');
+      if (modeles.retire) {
+        aide.textContent = "Ce modèle n'est plus proposé par Google : choisissez-en un autre. Changer de modèle fait réanalyser les CV.";
+        aide.className = 'hint warn';
+      } else if (modeles.source === 'google') {
+        aide.textContent = 'Liste tenue à jour depuis Google. Changer de modèle fait réanalyser les CV : des évaluations de deux modèles ne se comparent pas.';
+        aide.className = 'hint';
+      } else {
+        aide.textContent = `Liste de secours (Google injoignable : ${modeles.erreur}). Changer de modèle fait réanalyser les CV.`;
+        aide.className = 'hint warn';
+      }
     }
 
     function formatDuree(ms) {
@@ -814,7 +836,7 @@
         .saveSidebarConfig(data);
     }
 
-    function proposeGrid() {
+    function proposeGrid(remplacer = false) {
       const data = getFormData();
       if (!data.jobDescription) {
         showToast("Renseignez d'abord l'annonce (texte ou URL).", "error");
@@ -830,8 +852,16 @@
           if (res && res.ok) {
             renderGridSummary(res.grille);
             showToast(res.message, "success", 12000);
+          } else if (res && res.confirmer) {
+            // Grille déjà remplie : on dit ce que coûte le remplacement, et l'on redemande.
+            if (window.confirm(`${res.message}\n\nRemplacer la grille ?`)) proposeGrid(true);
           } else {
-            showToast(res ? res.message : "Erreur", "error", 9000);
+            const message = res ? res.message : "Erreur";
+            showToast(message, "error", 9000);
+            // Aussi dans la carte, à côté du bouton : c'est là qu'on regarde.
+            const resume = document.getElementById('gridSummary');
+            resume.textContent = message;
+            resume.className = 'grid-summary error';
           }
         })
         .withFailureHandler(err => {
@@ -839,7 +869,7 @@
           btn.textContent = '✨ Proposer';
           showToast("Erreur : " + err.message, "error");
         })
-        .proposerGrilleDepuisPanneau(data);
+        .proposerGrilleDepuisPanneau(data, remplacer);
     }
 
     function openGrid() {

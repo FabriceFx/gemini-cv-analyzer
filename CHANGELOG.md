@@ -4,13 +4,19 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 Ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/). Les
 versions antérieures à la 1.0.0 n'étaient pas numérotées.
 
-## [1.0.1] - 2026-09-28
+## [1.0.2] - 2026-09-28
 
 Corrections issues du premier essai en production.
+
+### Ajouté
+
+- Liste des modèles lue chez Google (`models.list`), filtrée sur les modèles de texte et gardée six heures en cache ; la liste écrite dans le code ne sert plus que de secours, et le panneau dit laquelle il affiche.
+- Un classeur neuf reçoit le modèle « flash » stable le plus récent de Google. Un modèle déjà enregistré n'est jamais remplacé : s'il a disparu, le panneau le signale.
 
 ### Modifié
 
 - Un critère indispensable que le CV ne démontre pas ne fait plus refuser : le CV plafonne au vivier, avec « à vérifier avant tout contact » dans le motif. Un CV muet sur un point n'est pas un candidat qui en manque. Le refus ne vient plus que du score, sous le seuil de vivier.
+- « Proposer la grille » fonctionne aussi sur une grille déjà remplie : après confirmation, qui dit que les retouches de l'équipe seront perdues et les CV réanalysés, la proposition remplace la grille. Auparavant, il fallait vider l'onglet à la main.
 - Mise à niveau d'un classeur de la version non numérotée : les colonnes « Note / 5 » et « Top 3 compétences » sont supprimées.
 - Le panneau dit depuis quand l'analyse attend son démarrage ; au-delà de 3 minutes, il explique ce qui peut le retarder et où regarder, et continue de suivre au lieu d'afficher une erreur.
 
@@ -19,7 +25,9 @@ Corrections issues du premier essai en production.
 - Une ligne réanalysée affichait l'ancienne note sur 5 à côté du nouveau score sur 100 (« 4/5 » et « 42/100 » pour le même CV).
 - Un profil solide qui ne mentionnait pas un critère indispensable (le niveau d'anglais) était refusé.
 - Un démarrage programmé qui trouvait l'outil occupé (recalcul, brouillons, proposition de grille) repartait sans rien dire : l'état restait « Programmé ». Il réessaie désormais chaque minute, et renonce en le disant au-delà d'un quart d'heure.
+- Un modèle retiré par Google mettait chaque CV en erreur (HTTP 404) ; l'analyse s'arrête désormais au premier lot, avec un message qui dit de choisir un autre modèle.
 - Un chien de garde impossible à poser laissait l'état « Programmé » ; l'échec est maintenant signalé.
+- Dans le panneau, plus aucun message ne s'affichait après le premier, erreurs comprises : « Proposer » semblait ne rien faire quand la grille existait déjà. L'erreur s'affiche aussi dans la carte de la grille.
 - Le nettoyage RGPD ne prenait pas le verrou : un tri simultané pouvait lui faire pseudonymiser la ligne d'un autre candidat.
 
 ## [1.0.0] - 2026-09-28

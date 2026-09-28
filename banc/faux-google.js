@@ -224,6 +224,10 @@ const installerFauxGoogle = (sandbox, { racine, DateContexte, options = {} }) =>
       return this;
     }
 
+    clearContent() {
+      return this.cellules((cellule) => { cellule.valeur = ''; cellule.lien = null; });
+    }
+
     merge() { return this; }
     setFontFamily() { return this; }
     setFontSize() { return this; }
@@ -524,6 +528,21 @@ const installerFauxGoogle = (sandbox, { racine, DateContexte, options = {} }) =>
     getScriptTimeZone: () => 'Europe/Paris',
   };
 
+  const cache = new Map();
+  sandbox.CacheService = {
+    getScriptCache: () => ({
+      get: (cle) => {
+        const e = cache.get(cle);
+        return e && e.fin > maintenant() ? e.valeur : null;
+      },
+      put: (cle, valeur, secondes) => {
+        if (secondes > 21600) throw new Error('Exception: Invalid argument: expirationInSeconds');
+        if (Buffer.byteLength(String(valeur), 'utf8') > 100 * 1024) throw new Error('Exception: Argument too large: value');
+        cache.set(cle, { valeur: String(valeur), fin: maintenant() + (secondes * 1000) });
+      },
+    }),
+  };
+
   sandbox.Logger = { log: (message) => { journal.logs.push(String(message)); } };
 
   sandbox.ScriptApp = {
@@ -645,8 +664,25 @@ const installerFauxGoogle = (sandbox, { racine, DateContexte, options = {} }) =>
     code: 200, corps: JSON.stringify({ candidates: [{ content: { parts: [{ text: texte }] }, finishReason }] }),
   });
 
+  // models.list : ce que Google rend, paginé, ou une panne si demandée.
+  const fauxListeModeles = (url, params) => {
+    journal.listesModeles = (journal.listesModeles || 0) + 1;
+    if (!params.headers || !params.headers['x-goog-api-key']) return { code: 403, corps: '{}' };
+    if (options.listeModelesEnPanne) return { code: 503, corps: JSON.stringify({ error: { message: 'Service indisponible' } }) };
+    const tous = options.modelesGoogle || [];
+    const jeton = (url.match(/pageToken=([^&]+)/) || [null, '0'])[1];
+    const debut = Number(decodeURIComponent(jeton));
+    const page = tous.slice(debut, debut + 3);
+    const suite = debut + 3 < tous.length ? String(debut + 3) : undefined;
+    return { code: 200, corps: JSON.stringify({ models: page, ...(suite ? { nextPageToken: suite } : {}) }) };
+  };
+
   const fauxGemini = (url, params) => {
     avancer(options.msParAppelGemini || 3000);
+    const modeleDemande = (url.match(/models\/([^:]+):generateContent/) || [])[1];
+    if (options.modelesRetires && options.modelesRetires.includes(modeleDemande)) {
+      return { code: 404, corps: JSON.stringify({ error: { message: `models/${modeleDemande} is not found for API version v1beta` } }) };
+    }
     if (!params.headers || !params.headers['x-goog-api-key']) return { code: 403, corps: JSON.stringify({ error: { message: 'Missing API key' } }) };
     const payload = JSON.parse(params.payload);
     const modele = (url.match(/models\/([^:]+):generateContent/) || [])[1];
@@ -701,7 +737,9 @@ const installerFauxGoogle = (sandbox, { racine, DateContexte, options = {} }) =>
 
   const fetchUn = (url, params = {}) => {
     let resultat;
-    if (url.startsWith('https://generativelanguage.googleapis.com/')) {
+    if (url.startsWith('https://generativelanguage.googleapis.com/v1beta/models?')) {
+      resultat = fauxListeModeles(url, params);
+    } else if (url.startsWith('https://generativelanguage.googleapis.com/')) {
       resultat = fauxGemini(url, params);
     } else {
       avancer(500);

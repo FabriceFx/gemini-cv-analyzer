@@ -68,6 +68,7 @@ un **maximum** : l'outil ne complète jamais.
 | Colonnes retrouvées par leur en-tête. | Une colonne ajoutée par l'équipe ne décale aucune écriture. |
 | Réanalyse sur la ligne existante. | La décision RH, la date de brouillon et les colonnes de l'équipe restent attachées au candidat. |
 | Un brouillon daté aussitôt créé, un seul par adresse. | Une génération interrompue se relance sans doublon ; une même personne ne reçoit pas invitation et refus. |
+| Liste des modèles demandée à Google, jamais changée en silence. | Les modèles Gemini changent tous les quelques mois ; changer de modèle fait réanalyser tous les CV. |
 | Annonce par URL lue une seule fois. | Tous les CV d'une campagne sont comparés à la même annonce. |
 | Texte venu d'un CV forcé en texte. | Un « nom » `=IMAGE(…)` ferait sortir le contenu du classeur. |
 | Projet lié au classeur. | Chaque action manuelle s'exécute sous l'identité de qui clique. |
@@ -96,6 +97,7 @@ le délai de rétention et pseudonymise leurs lignes, extraits compris.
 ```
 Constants.gs          version, en-têtes, libellés, prompt par défaut
 Config.gs             réglages (DocumentProperties), prompt effectif, annonce de référence
+Modeles.gs            liste des modèles lue chez Google, défaut, modèle retiré
 Grille.gs             onglet de la grille, proposition par Gemini, schéma, empreintes
 Classement.gs         score, recommandation, doublons, places, tri
 Resultats.gs          lecture et écriture de l'onglet Résultats par en-tête
@@ -151,6 +153,8 @@ Réintroduire un défaut doit faire échouer le banc :
 | Colonnes de l'ancien modèle laissées en place | Mise à niveau d'un classeur v0 |
 | Démarrage qui repart en silence, verrou pris | Déclencheur arrivé pendant une autre opération |
 | Chien de garde posé hors du `try` | Chien de garde impossible à poser |
+| Erreur 404 d'un modèle retiré laissée à chaque CV | Modèle retiré : l'analyse s'arrête au premier lot |
+| Modèle enregistré remplacé par le défaut | Un modèle enregistré qui a disparu reste choisi |
 | Nettoyage RGPD sans verrou | RGPD : pas de nettoyage pendant une autre opération |
 
 Avant de pousser :

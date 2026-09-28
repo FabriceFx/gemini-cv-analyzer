@@ -75,7 +75,7 @@ brouillon avant envoi.
 
 ## Mise à jour depuis une version non numérotée
 
-1. Remplacez tous les fichiers ; ajoutez `Grille.gs`, `Classement.gs`, `Resultats.gs` ; **supprimez `Test.gs`**.
+1. Remplacez tous les fichiers ; ajoutez `Grille.gs`, `Classement.gs`, `Resultats.gs`, `Modeles.gs` ; **supprimez `Test.gs`**.
 2. Au premier lancement, l'onglet Résultats est mis à niveau : les colonnes de l'ancien modèle (« Top 3 compétences », « Note / 5 ») sont supprimées, les nouvelles s'ajoutent à droite. Pour repartir d'un onglet neuf, dans l'ordre de colonnes de la v1, préférez **⚙️ Initialiser / réinitialiser les feuilles** : il efface toutes les lignes, décisions RH comprises.
 3. Proposez puis relisez la grille, puis lancez l'analyse : **tous les CV sont réanalysés une fois** (un appel Gemini chacun), puisqu'ils avaient été évalués sans grille.
 4. Si vous aviez modifié la colonne « Recommandation » à la main, reportez vos décisions dans « Décision RH ».
@@ -85,11 +85,13 @@ brouillon avant envoi.
 | Situation | Que faire |
 |---|---|
 | « La grille d'évaluation est vide » | Panneau : ✨ Proposer, relisez, relancez. |
+| Nouvelle proposition de grille | **✨ Proposer** remplace la grille existante après confirmation : vos retouches sont perdues, et les CV seront réanalysés. |
 | « La grille d'évaluation est à corriger » | Le message nomme la ligne : niveau vide ou inconnu, poids invalide, critère en double. |
 | Moins de « À contacter » que de places | Normal : seuls les CV au-dessus du seuil sont proposés. Le bilan le dit. |
 | Un CV reste « Erreur » | Le motif dit pourquoi ; il est retenté à chaque lancement. |
 | Beaucoup de « À réanalyser » après une retouche | Vous avez ajouté ou reformulé un critère, ou changé l'annonce, les consignes ou le modèle : lancez l'analyse. |
 | « Annonce … au-delà des 9 Ko » | Retirez la présentation de l'entreprise, ou donnez l'URL de l'annonce. |
+| « Le modèle … n'est pas disponible chez Google » | Google l'a retiré : choisissez-en un autre dans les options avancées du panneau (la liste y est à jour), puis relancez. Tous les CV seront réanalysés. |
 | « Programmé » qui dure | C'est Google qui lance l'analyse : de quelques secondes à quelques minutes. Au-delà de 3 minutes, le panneau le signale ; **Apps Script › Exécutions** montre si `_resumeAnalysisTrigger` a tourné, et son message d'erreur (quota quotidien des déclencheurs, par exemple). |
 | « Une autre opération occupe l'outil » | Un recalcul, des brouillons ou une proposition de grille sont en cours : l'analyse réessaie seule chaque minute, pendant un quart d'heure. |
 | Analyse qui semble bloquée | Onglet 📊 Suivi : **🔄 Débloquer / Réinitialiser l'état**, puis relancez. |

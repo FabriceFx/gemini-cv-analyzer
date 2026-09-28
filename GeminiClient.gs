@@ -249,6 +249,11 @@ function analyzeDocumentsBatch(files, contexte) {
       const entry = subBatch[i];
       const code = response.getResponseCode();
 
+      if (code === 404) {
+        // Modèle retiré : tous les CV échoueraient pareil. On arrête l'analyse
+        // ici, avec un message qui dit quoi faire, plutôt que d'écrire une erreur par CV.
+        throw new Error(messageModeleIndisponible_(contexte.model));
+      }
       if (code === 200) {
         try {
           results.push({ file: entry.file, analysis: lireAnalyse_(_extractGeminiText(response.getContentText()), contexte.criteres) });
@@ -346,6 +351,9 @@ function callGeminiAPI(model, payload, apiKey) {
       }
     } catch (e) { }
 
+    if (code === 404) {
+      throw new Error(messageModeleIndisponible_(model));
+    }
     if (code === 400) {
       throw new Error(`Requête invalide (HTTP 400). Le document est peut-être trop complexe ou non supporté. Détail : ${errorMsg}`);
     }

@@ -448,15 +448,28 @@ test('Grille vide : l\'analyse refuse de partir et dit quoi faire, sans appeler 
   assert.ok(!panneau.ok && panneau.message.includes('grille'), panneau.message);
 });
 
-test('Proposition de grille : écrite dans l\'onglet vide, jamais par-dessus une grille existante', () => {
+test('Proposition de grille : dans l\'onglet vide sans question ; sur une grille remplie, seulement après confirmation', () => {
   const { f, g } = installer();
   const grille = f('lireGrille_')();
   assert.strictEqual(grille.criteres.length, 4);
   assert.strictEqual(grille.criteres[0].poids, 3, 'poids par défaut écrit pour être vu');
   assert.ok(derniereAlerte(g).message.includes('dont 1 indispensable'), derniereAlerte(g).message);
+  // L'équipe retouche un poids, puis redemande une proposition.
+  ecrireGrille(g, GRILLE_LIGNES.map((l, i) => (i === 0 ? [l[0], l[1], 5, l[3]] : l)));
+  const appelsAvant = g.journal.requetesGemini.length;
+  g.repondre('NO');
   f('proposerGrilleEvaluation')();
-  assert.ok(derniereAlerte(g).message.includes('contient déjà 4 critères'), derniereAlerte(g).message);
-  assert.strictEqual(f('lireGrille_')().criteres.length, 4);
+  const question = g.journal.alertes.find((a) => a.titre === 'Remplacer la grille ?');
+  assert.ok(question && question.message.includes('réanalysés'), 'le coût du remplacement est dit avant');
+  assert.strictEqual(f('lireGrille_')().criteres[0].poids, 5, 'refusé : rien ne change');
+  assert.strictEqual(g.journal.requetesGemini.length, appelsAvant, 'refusé : aucun appel à Gemini');
+  g.repondre('YES');
+  f('proposerGrilleEvaluation')();
+  assert.strictEqual(f('lireGrille_')().criteres.length, 4, 'remplacée, pas ajoutée à la suite');
+  assert.strictEqual(f('lireGrille_')().criteres[0].poids, 3);
+  // Panneau : sans confirmation, rien n'est écrit et la réponse le demande.
+  const reponse = f('proposerGrilleDepuisPanneau')(null);
+  assert.ok(!reponse.ok && reponse.confirmer === true, JSON.stringify(reponse));
 });
 
 const analyserTout = (env) => {
@@ -701,6 +714,74 @@ test('Reprise automatique : compte gratuit, lots de 3, arrêt avant 6 minutes pu
   assert.strictEqual(toutes.filter((x) => x.Recommandation === 'À contacter').length, 3);
 });
 
+
+/* =============================== Modèles =============================== */
+
+const MODELES_GOOGLE = [
+  { name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] },
+  { name: 'models/gemini-4.0-flash', supportedGenerationMethods: ['generateContent', 'countTokens'] },
+  { name: 'models/gemini-4.0-flash-lite', supportedGenerationMethods: ['generateContent'] },
+  { name: 'models/gemini-4.1-flash-preview', supportedGenerationMethods: ['generateContent'] },
+  { name: 'models/gemini-4.0-pro', supportedGenerationMethods: ['generateContent'] },
+  { name: 'models/gemini-embedding-001', supportedGenerationMethods: ['embedContent'] },
+  { name: 'models/gemini-4.0-flash-image', supportedGenerationMethods: ['generateContent'] },
+  { name: 'models/text-bison-001', supportedGenerationMethods: ['generateText'] },
+];
+
+test('Modèles : liste lue chez Google, paginée, filtrée, triée ; défaut = flash stable le plus récent ; cache', () => {
+  const { f, g } = charger({ modelesGoogle: MODELES_GOOGLE });
+  g.proprietes.script.setProperty('GEMINI_API_KEY', 'AIzaCleDeTest0123456789');
+  const r = f('modelesDisponibles_')();
+  assert.strictEqual(r.source, 'google');
+  assert.deepStrictEqual([...r.modeles], ['gemini-4.1-flash-preview', 'gemini-4.0-flash', 'gemini-4.0-flash-lite', 'gemini-4.0-pro', 'gemini-2.5-flash']);
+  assert.strictEqual(r.defaut, 'gemini-4.0-flash', 'ni préversion ni lite');
+  f('modelesDisponibles_')();
+  assert.strictEqual(g.journal.listesModeles, 3, 'trois pages lues une seule fois, puis le cache');
+});
+
+test('Modèles : Google injoignable ou clé absente → liste de secours, et le panneau le dit', () => {
+  const { f, g } = charger({ listeModelesEnPanne: true });
+  assert.strictEqual(f('modelesDisponibles_')().erreur, 'clé API non configurée');
+  g.proprietes.script.setProperty('GEMINI_API_KEY', 'AIzaCleDeTest0123456789');
+  const r = f('modelesDisponibles_')();
+  assert.strictEqual(r.source, 'secours');
+  assert.ok(r.erreur.includes('503'), r.erreur);
+  assert.ok(r.modeles.length > 0);
+});
+
+test('Modèles : un modèle enregistré qui a disparu reste choisi, signalé, jamais remplacé en silence', () => {
+  const env = installer({ modelesGoogle: MODELES_GOOGLE, dossier: DOSSIER().slice(0, 2) });
+  const { el } = panneau(env);
+  // installer() enregistre gemini-3.7-flash, absent de la liste de Google.
+  assert.strictEqual(el('modelSelect').enfants.find((o) => o.selected).value, 'gemini-3.7-flash');
+  assert.ok(el('modelSelect').enfants[0].textContent.includes("n'est plus proposé par Google"));
+  assert.strictEqual(el('modelSourceHint').className, 'hint warn');
+  assert.strictEqual(env.f('getConfig')().model, 'gemini-3.7-flash', 'le réglage enregistré ne bouge pas');
+});
+
+test('Modèles : un classeur neuf reçoit le flash stable le plus récent de Google', () => {
+  const { f, g } = charger({ modelesGoogle: MODELES_GOOGLE });
+  g.proprietes.script.setProperty('GEMINI_API_KEY', 'AIzaCleDeTest0123456789');
+  const donnees = f('getSidebarInitialData')();
+  assert.strictEqual(donnees.modeles.choisi, 'gemini-4.0-flash');
+  assert.strictEqual(donnees.config.model, 'gemini-4.0-flash');
+  assert.strictEqual(donnees.modeles.retire, false);
+});
+
+test('Défaut v1.0.0 : modèle retiré → l\'analyse s\'arrête au premier lot avec un message utile, sans une erreur par CV', () => {
+  const env = installer({ modelesRetires: ['gemini-3.7-flash'], grille: false });
+  const { f, g } = env;
+  ecrireGrille(g, GRILLE_LIGNES);
+  assert.throws(() => f('analyzeCVs')(), /n'est pas disponible chez Google/);
+  const etat = JSON.parse(g.proprietes.script.getProperty('CV_ANALYZER_JOB_STATE'));
+  assert.strictEqual(etat.status, 'ERROR');
+  assert.ok(etat.errorMessage.includes('Choisissez-en un autre dans le panneau'), etat.errorMessage);
+  assert.strictEqual(lignes(g).length, 0, 'aucune ligne d\'erreur par CV');
+  g.verrou.tenu = false;
+  f('proposerGrilleEvaluation')();
+  assert.ok(derniereAlerte(g).message.includes("n'est pas disponible chez Google"), derniereAlerte(g).message);
+});
+
 /* =============================== Brouillons =============================== */
 
 test('Brouillons : décision RH prioritaire, un par adresse, datés, jamais refaits', () => {
@@ -826,11 +907,18 @@ const panneau = (env) => {
     return proxy;
   };
   const auChargement = [];
+  const minuteries = [];
+  const confirmations = [];
+  const reponseConfirmation = { valeur: false };
   const client = {
     document,
-    window: { addEventListener: (ev, fn) => { if (ev === 'DOMContentLoaded') auChargement.push(fn); } },
+    window: {
+      addEventListener: (ev, fn) => { if (ev === 'DOMContentLoaded') auChargement.push(fn); },
+      confirm: (message) => { confirmations.push(message); return reponseConfirmation.valeur; },
+    },
     google: { script: { run: new Proxy({}, { get: (c, nom) => pont()[nom] }) } },
-    setTimeout: () => 0,
+    setTimeout: (fn) => { minuteries.push(fn); return minuteries.length; },
+    clearTimeout: () => {},
     setInterval: () => 0,
     clearInterval: () => {},
     console,
@@ -838,13 +926,14 @@ const panneau = (env) => {
   vm.createContext(client);
   vm.runInContext(script, client, { filename: 'Sidebar.html' });
   auChargement.forEach((fn) => fn());
-  return { client, el: (id) => document.getElementById(id), appels, appeler: (nom, ...args) => vm.runInContext(nom, client)(...args) };
+  const ecoulerMinuteries = () => minuteries.splice(0).forEach((fn) => fn());
+  return { client, el: (id) => document.getElementById(id), appels, ecoulerMinuteries, confirmations, reponseConfirmation, appeler: (nom, ...args) => vm.runInContext(nom, client)(...args) };
 };
 
 test('Panneau : le script client s\'exécute sur les données réelles du serveur', () => {
   const env = installer();
   analyserTout(env);
-  const { el, appels, appeler } = panneau(env);
+  const { el, appels, appeler, ecoulerMinuteries, confirmations, reponseConfirmation } = panneau(env);
   assert.ok(appels.includes('getSidebarInitialData'));
   const version = fs.readFileSync(path.join(RACINE, 'VERSION'), 'utf8').trim();
   assert.ok(el('appFooter').textContent.includes(`v${version}`), el('appFooter').textContent);
@@ -866,8 +955,22 @@ test('Panneau : le script client s\'exécute sur les données réelles du serveu
   assert.strictEqual(env.g.journal.brouillons.pop().destinataire, 'emma@ex.fr');
   assert.ok(el('btnDraftEmail').disabled, 'bouton désactivé une fois le brouillon créé');
 
+  // Défaut v1.0.1 : après un premier message masqué, plus aucun ne s'affichait.
+  ecoulerMinuteries();
+  // Grille remplie : le panneau dit ce que coûte le remplacement ; refusé, rien ne change.
+  const avant = JSON.stringify(env.f('lireGrille_')().criteres.map((c) => c.texte));
+  ecrireGrille(env.g, GRILLE_LIGNES.map((l, i) => (i === 0 ? [l[0], l[1], 5, l[3]] : l)));
+  reponseConfirmation.valeur = false;
   appeler('proposeGrid');
-  assert.ok(el('toastMessage').textContent.includes('contient déjà'), el('toastMessage').textContent);
+  assert.ok(confirmations.pop().includes('niveaux, poids et précisions retouchés'), 'le coût du remplacement est dit');
+  assert.strictEqual(env.f('lireGrille_')().criteres[0].poids, 5, 'refusé : la grille retouchée reste');
+  // Accepté : la grille est remplacée, le message de succès s'affiche.
+  reponseConfirmation.valeur = true;
+  appeler('proposeGrid');
+  assert.strictEqual(env.f('lireGrille_')().criteres[0].poids, 3, 'accepté : la proposition remplace la grille');
+  assert.strictEqual(JSON.stringify(env.f('lireGrille_')().criteres.map((c) => c.texte)), avant);
+  assert.strictEqual(el('toastMessage').className, 'toast success', 'le message de succès doit être visible');
+  assert.notStrictEqual(el('toastMessage').style.display, 'none', 'aucun style en ligne ne doit le masquer');
   appeler('rerank');
   assert.ok(appels.includes('recalculerClassementDepuisPanneau'));
   assert.ok(el('toastMessage').textContent.includes('à contacter'), el('toastMessage').textContent);

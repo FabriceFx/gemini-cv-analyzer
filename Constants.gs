@@ -220,7 +220,7 @@ const EMPREINTES_PROMPTS_HISTORIQUES = Object.freeze([
   'e500d60a013afef2', // a96f22f → cccde0c, 10 juillet 2026 (Code.gs, seconde variante)
 ]);
 
-// Liste des modèles Gemini supportés et recommandés
+// Liste de SECOURS, utilisée seulement quand Google ne peut pas rendre la sienne (Modeles.gs).
 const AVAILABLE_MODELS = [
   'gemini-3.7-flash',
   'gemini-3.7-pro',

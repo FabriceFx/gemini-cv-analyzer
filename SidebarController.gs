@@ -79,13 +79,25 @@ function getSidebarInitialData() {
     }
   }
 
+  // Liste tenue à jour depuis Google ; le modèle enregistré n'est jamais remplacé en silence.
+  const disponibles = modelesDisponibles_();
+  const modeleEnregistre = PropertiesService.getDocumentProperties().getProperty(PROP_KEYS.MODEL);
+  const modeleChoisi = modeleEnregistre || disponibles.defaut;
+
   return {
     version: ANALYSEUR_CV_VERSION,
+    modeles: {
+      liste: disponibles.modeles,
+      source: disponibles.source,
+      erreur: disponibles.erreur,
+      choisi: modeleChoisi,
+      retire: disponibles.source === 'google' && !disponibles.modeles.includes(modeleChoisi),
+    },
     isApiKeySet: apiKey.length > 0,
     config: {
       folderUrl: config.folderUrl,
       jobDescription: config.jobDescription,
-      model: config.model,
+      model: modeleChoisi,
       accountType: config.accountType,
       criteria: config.criteria,
       // Vide = prompt par défaut. Le défaut n'est plus affiché dans le champ :
@@ -98,7 +110,6 @@ function getSidebarInitialData() {
       placesContact: config.placesContact,
     },
     grille: resumeGrille_(),
-    availableModels: AVAILABLE_MODELS,
     jobState,
     candidatesList,
     selectedCandidate,

@@ -338,14 +338,18 @@ const proposerCriteres_ = (annonce, consignes, apiKey, model) => {
  * Écrit une proposition dans la grille, **seulement si elle est vide** : le
  * code ne réécrit jamais une grille que l'équipe a pu retoucher.
  */
-const ecrireGrilleProposee_ = (criteres) => {
+const ecrireGrilleProposee_ = (criteres, remplacer = false) => {
   const feuille = assurerOngletGrille_();
   const existante = lireGrille_();
-  if (existante.erreurs.length > 0) {
-    throw new Error(`La grille est à corriger avant toute proposition : ${existante.erreurs.join(' ')}`);
+  const occupee = existante.criteres.length > 0 || existante.erreurs.length > 0;
+  if (occupee && !remplacer) {
+    throw new Error(`${messageRemplacement_(existante)} Confirmez le remplacement pour continuer.`);
   }
-  if (existante.criteres.length > 0) {
-    throw new Error(`La grille contient déjà ${existante.criteres.length} critère${existante.criteres.length > 1 ? 's' : ''}. Pour une nouvelle proposition, videz d'abord ses lignes dans l'onglet « ${GRILLE_SHEET_NAME} » (l'en-tête reste).`);
+  if (occupee) {
+    // Remplacement demandé et confirmé : on vide les quatre colonnes de la grille,
+    // sans toucher à l'en-tête ni à ce que l'équipe aurait mis à droite.
+    const hauteur = feuille.getLastRow();
+    if (hauteur > 1) feuille.getRange(2, 1, hauteur - 1, 4).clearContent();
   }
   const lignes = criteres.map((c) => [
     neutraliserFormule_(c.critere), c.niveau, POIDS_PAR_DEFAUT[c.niveau], neutraliserFormule_(c.precisions),
@@ -353,6 +357,23 @@ const ecrireGrilleProposee_ = (criteres) => {
   feuille.getRange(2, 1, lignes.length, 4).setValues(lignes);
   SpreadsheetApp.flush();
   return feuille;
+};
+
+/**
+ * Ce que coûte un remplacement, dit avant de le faire : les retouches de
+ * l'équipe sont perdues, et les CV déjà évalués devront être réanalysés.
+ */
+const messageRemplacement_ = (existante) => {
+  const n = existante.criteres.length;
+  return `La grille contient déjà ${n > 0 ? accorder_(n, 'critère') : 'des lignes'}. `
+    + 'Une nouvelle proposition les remplace — niveaux, poids et précisions retouchés compris — '
+    + 'et les CV déjà évalués devront être réanalysés.';
+};
+
+/** Vrai si la grille porte déjà quelque chose qu'une proposition écraserait. */
+const grilleOccupee_ = () => {
+  const existante = lireGrille_();
+  return existante.criteres.length > 0 || existante.erreurs.length > 0 ? existante : null;
 };
 
 /** Ce qu'on dit à l'équipe après une proposition : combien, lesquels comptent double, quoi faire. */
@@ -384,7 +405,8 @@ function ouvrirGrilleEvaluation() {
 }
 
 /**
- * Menu : propose une grille tirée de l'annonce et l'écrit dans l'onglet vide.
+ * Menu : propose une grille tirée de l'annonce. Sur une grille déjà remplie,
+ * demande d'abord confirmation : le remplacement écrase les retouches de l'équipe.
  */
 function proposerGrilleEvaluation() {
   const ui = SpreadsheetApp.getUi();
@@ -394,10 +416,15 @@ function proposerGrilleEvaluation() {
     return;
   }
   try {
+    const occupee = grilleOccupee_();
+    if (occupee) {
+      const reponse = ui.alert('Remplacer la grille ?', `${messageRemplacement_(occupee)}\n\nRemplacer la grille ?`, ui.ButtonSet.YES_NO);
+      if (reponse !== ui.Button.YES) return;
+    }
     const { config, apiKey, annonce } = contexteProposition_(true);
     SpreadsheetApp.getActiveSpreadsheet().toast('Préparation de la grille...', 'Grille ✨');
     const criteres = proposerCriteres_(annonce, config.criteria, apiKey, config.model);
-    const feuille = ecrireGrilleProposee_(criteres);
+    const feuille = ecrireGrilleProposee_(criteres, Boolean(occupee));
     SpreadsheetApp.getActiveSpreadsheet().setActiveSheet(feuille);
     ui.alert('Grille proposée', bilanProposition_(criteres), ui.ButtonSet.OK);
   } catch (e) {
@@ -409,10 +436,15 @@ function proposerGrilleEvaluation() {
 
 /**
  * Panneau : enregistre la configuration saisie, puis propose la grille.
+ *
+ * Grille déjà remplie et `remplacer` absent : rien n'est écrit, et la réponse
+ * porte `confirmer: true` avec ce que coûte le remplacement ; le panneau le
+ * demande, puis rappelle avec `remplacer: true`.
  * @param {Object} formData
- * @returns {{ok: boolean, message: string, grille?: Object}}
+ * @param {boolean} [remplacer]
+ * @returns {{ok: boolean, message: string, grille?: Object, confirmer?: boolean}}
  */
-function proposerGrilleDepuisPanneau(formData) {
+function proposerGrilleDepuisPanneau(formData, remplacer) {
   if (formData) {
     const enregistrement = saveConfig(formData);
     if (!enregistrement.ok) return enregistrement;
@@ -422,9 +454,13 @@ function proposerGrilleDepuisPanneau(formData) {
     return { ok: false, message: 'Une analyse est en cours. Attendez sa fin pour préparer la grille.' };
   }
   try {
+    const occupee = grilleOccupee_();
+    if (occupee && remplacer !== true) {
+      return { ok: false, confirmer: true, message: messageRemplacement_(occupee) };
+    }
     const { config, apiKey, annonce } = contexteProposition_(false);
     const criteres = proposerCriteres_(annonce, config.criteria, apiKey, config.model);
-    const feuille = ecrireGrilleProposee_(criteres);
+    const feuille = ecrireGrilleProposee_(criteres, Boolean(occupee));
     SpreadsheetApp.getActiveSpreadsheet().setActiveSheet(feuille);
     return { ok: true, message: bilanProposition_(criteres), grille: resumeGrille_() };
   } catch (e) {
