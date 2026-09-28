@@ -1,0 +1,998 @@
+diff --git a/Main.gs b/Main.gs
+index 4e429c8..15c740c 100644
+--- a/Main.gs
++++ b/Main.gs
+@@ -1,6 +1,10 @@
+ /**
+  * Main.gs
+- * Point d'entrée principal pour l'orchestration de l'analyse (batch, unitaire, et reprise automatique).
++ * Point d'entrée principal pour l'orchestration de l'analyse (lots, CV unique, reprise automatique).
++ *
++ * Les noms des fonctions publiques sont ceux des versions antérieures : les
++ * déclencheurs déjà posés (analyse quotidienne, reprise) les appellent par
++ * leur nom, et un renommage les rendrait « introuvables » sans bruit.
+  */
+ 
+ function analyzeCVs() {
+@@ -32,14 +36,114 @@ function _notifyAutomatedFailure(reason) {
+     MailApp.sendEmail({
+       to: userEmail,
+       subject: "⚠️ Échec de l'analyse de CV automatique",
+-      body: `L'analyse automatique n'a pas pu démarrer :\n\n${reason}\n\nVeuillez vérifier la configuration de votre outil.`
++      body: `L'analyse automatique n'a pas pu aboutir :\n\n${reason}\n\nOuvrez le classeur et son panneau de contrôle pour corriger la configuration.`,
+     });
+   }
+ }
+ 
+ /**
+- * Fonction principale : Liste les fichiers du dossier, les analyse et les note par rapport à l'offre d'emploi.
+- * Gère le découpage en sous-lots, les pauses de quota et la reprise automatique anti-timeout.
++ * Tout ce qu'il faut pour évaluer des CV : clé, annonce de référence, grille,
++ * réglages, empreinte du référentiel et contexte Gemini. Lève une erreur qui
++ * dit quoi faire si l'un manque.
++ */
++const preparerAnalyse_ = (canUseUi) => {
++  const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
++  if (!apiKey) throw new Error("Clé API manquante. Utilisez le menu « 🔑 Configurer la clé API ».");
++  const { config, criteres, reglages, empreinte } = referentielCourant_();
++  if (!String(config.jobDescription || '').trim()) {
++    throw new Error("Annonce manquante : renseignez son texte ou son URL dans le panneau de contrôle.");
++  }
++  const prompt = promptEffectif_(config);
++  if (prompt.ignore && canUseUi) {
++    SpreadsheetApp.getActiveSpreadsheet().toast('Prompt personnalisé invalide (il doit contenir {{JOB_DESCRIPTION}} et {{CRITERIA}}) : prompt par défaut utilisé.', '⚠️ Attention');
++  }
++  const annonce = annonceDeReference_(config, apiKey, config.model, canUseUi);
++  const contexte = contexteEvaluation_({
++    apiKey, model: config.model, prompt: prompt.prompt, annonce, criteres, consignes: config.criteria,
++  });
++  return { config, criteres, reglages, empreinte, apiKey, annonce, contexte };
++};
++
++/**
++ * Fiche à écrire dans l'onglet pour un résultat d'analyse.
++ *
++ * La recommandation écrite ici est **provisoire** et le motif le dit : les
++ * places de contact et les doublons ne se décident qu'une fois tous les CV
++ * évalués, par le classement de fin d'analyse.
++ */
++const ficheDepuisResultat_ = ({ file, analysis, error }, { criteres, reglages, empreinte }) => {
++  const maintenant = new Date();
++  const C = COLONNES_RESULTATS;
++  if (!analysis) {
++    Logger.log(`Erreur CV (${file.getName()}) : ${error}`);
++    return {
++      id: file.getId(),
++      nomFichier: file.getName(),
++      enErreur: true,
++      valeurs: {
++        [C.CANDIDAT]: "Erreur d'analyse", [C.EMAIL]: '', [C.TELEPHONE]: '',
++        [C.RECOMMANDATION]: RECOMMANDATIONS.ERREUR, [C.SCORE]: '',
++        [C.MOTIF]: `Erreur d'analyse : ${String(error).replace(/\.?\s*$/, '.')} Sera retenté au prochain lancement.`,
++        [C.DOUBLON]: '', [C.DETAIL]: '', [C.POINTS_FORTS]: '', [C.VIGILANCE]: '', [C.EXPERIENCE]: '', [C.FORMATION]: '',
++        [C.FICHIER]: file.getName(), [C.DATE]: maintenant, [C.EVALUATIONS]: '', [C.REFERENTIEL]: '', [C.ID]: file.getId(),
++      },
++    };
++  }
++  const resultat = scorerEvaluations_(criteres, analysis.evaluations);
++  const base = recommandationDeBase_(resultat, reglages);
++  return {
++    id: file.getId(),
++    nomFichier: file.getName(),
++    enErreur: false,
++    valeurs: {
++      [C.CANDIDAT]: analysis.candidateName || 'Inconnu',
++      [C.EMAIL]: analysis.email || 'Non renseigné',
++      [C.TELEPHONE]: analysis.phone || 'Non renseigné',
++      [C.RECOMMANDATION]: base.recommandation,
++      [C.SCORE]: resultat.score,
++      [C.MOTIF]: `Provisoire, en attente du classement de fin d'analyse (places, doublons). ${base.motif}`,
++      [C.DOUBLON]: '',
++      [C.DETAIL]: detailScore_(criteres, analysis.evaluations, resultat),
++      [C.POINTS_FORTS]: analysis.strengths,
++      [C.VIGILANCE]: analysis.weaknesses,
++      [C.EXPERIENCE]: analysis.experience,
++      [C.FORMATION]: analysis.education,
++      [C.FICHIER]: file.getName(),
++      [C.DATE]: maintenant,
++      [C.EVALUATIONS]: serialiserEvaluations_(analysis.evaluations),
++      [C.REFERENTIEL]: empreinte,
++      [C.ID]: file.getId(),
++    },
++  };
++};
++
++/**
++ * Synthèse de session : une phrase de conseil, à partir des scores seuls.
++ *
++ * Les noms ne partent pas : la phrase n'en a pas besoin, et ce qui n'est pas
++ * envoyé n'a pas à être protégé.
++ */
++const ecrireSynthese_ = (feuille, carte, annonce, apiKey, model, canUseUi) => {
++  const classes = [RECOMMANDATIONS.CONTACT, RECOMMANDATIONS.VIVIER, RECOMMANDATIONS.REFUS];
++  const resume = lireLignesResultats_(feuille, carte)
++    .filter((l) => classes.includes(texteLigne_(l, COLONNES_RESULTATS.RECOMMANDATION)))
++    .slice(0, 80)
++    .map((l, i) => `- Candidat ${i + 1} : ${valeurLigne_(l, COLONNES_RESULTATS.SCORE)}/100, ${texteLigne_(l, COLONNES_RESULTATS.RECOMMANDATION)}`);
++  if (resume.length === 0) return;
++  try {
++    if (canUseUi) SpreadsheetApp.getActiveSpreadsheet().toast('Génération de la synthèse...', 'Synthèse 🧠', 10);
++    const synthese = generateSessionSynthesis(resume.join('\n'), annonce, apiKey, model);
++    feuille.getRange('A2').setValue(neutraliserFormule_(`Synthèse globale : ${synthese}`));
++  } catch (e) {
++    Logger.log(`Synthèse non générée : ${e.message}`);
++    feuille.getRange('A2').setValue('Synthèse globale : analyse terminée (synthèse indisponible).');
++  }
++};
++
++/**
++ * Fonction principale : liste les fichiers du dossier, analyse ceux qui ne sont
++ * pas à jour, puis classe l'ensemble. Gère le découpage en sous-lots, les
++ * pauses de quota et la reprise automatique anti-timeout.
+  */
+ function _runAnalysis(options) {
+   const isInteractive = Boolean(options && options.interactive);
+@@ -48,10 +152,10 @@ function _runAnalysis(options) {
+   const source = (options && options.source) || (isInteractive ? 'interactive' : 'automated');
+   const notifyByEmail = source === 'automated' || (source === 'interactive' && isContinuation);
+   const lock = LockService.getScriptLock();
+-  
++
+   if (!lock.tryLock(5000)) {
+     if (canUseUi) {
+-      SpreadsheetApp.getActiveSpreadsheet().toast("Une analyse est déjà en cours, veuillez patienter.", "⏳");
++      SpreadsheetApp.getActiveSpreadsheet().toast('Une analyse est déjà en cours, veuillez patienter.', '⏳');
+     } else if (source === 'sidebar') {
+       const rawState = PropertiesService.getScriptProperties().getProperty(PROP_KEY_JOB_STATE);
+       let isAlreadyRunning = false;
+@@ -61,181 +165,141 @@ function _runAnalysis(options) {
+           const elapsed = Date.now() - (parsed.lastUpdated || 0);
+           const isRunning = (parsed.status === 'RUNNING' || parsed.status === 'CONTINUING') && elapsed < 15 * 60 * 1000;
+           const isScheduled = parsed.status === 'SCHEDULED' && elapsed < 3 * 60 * 1000;
+-          if (isRunning || isScheduled) {
+-            isAlreadyRunning = true;
+-          }
++          isAlreadyRunning = isRunning || isScheduled;
+         } catch (e) { }
+       }
+       if (!isAlreadyRunning) {
+-        _updateProgressState({ status: "BUSY", errorMessage: "Une analyse est déjà en cours d'exécution." });
++        _updateProgressState({ status: 'BUSY', errorMessage: "Une analyse est déjà en cours d'exécution." });
+       }
+     }
+     return;
+   }
+ 
+-  // Activer le trigger chien de garde de secours à +7 minutes (au cas où le script serait tué brutalement)
++  // Chien de garde à +7 minutes, au cas où l'exécution serait tuée net.
+   _scheduleWatchdogTrigger();
++  const startTime = Date.now();
++
++  const echouer = (message, messageUi) => {
++    if (canUseUi) SpreadsheetApp.getUi().alert(messageUi || message);
++    else if (notifyByEmail) _notifyAutomatedFailure(message);
++    _updateProgressState({ status: 'ERROR', source, errorMessage: message });
++    _cleanupContinuationTriggers();
++  };
+ 
+   try {
+     const ss = SpreadsheetApp.getActiveSpreadsheet();
+-    const resultsSheet = ss.getSheetByName(RESULTS_SHEET_NAME);
+-
+-    if (!resultsSheet) {
+-      const errMsg = "La feuille Résultats de l'analyse est introuvable.";
+-      if (canUseUi) {
+-        SpreadsheetApp.getUi().alert("Erreur : veuillez d'abord initialiser les feuilles via le menu '⚙️ Initialiser / Réinitialiser les feuilles'.");
+-      } else if (notifyByEmail) {
+-        _notifyAutomatedFailure(errMsg);
+-      }
+-      _updateProgressState({ status: "ERROR", errorMessage: errMsg });
+-      _cleanupContinuationTriggers();
+-      return;
+-    }
+-
+-    const startTime = Date.now();
+ 
+-    let commonConfig;
++    let feuille;
++    let carte;
++    let prep;
+     try {
+-      commonConfig = _prepareCommonConfig(canUseUi);
++      ({ feuille, carte } = ongletResultats_());
++      prep = preparerAnalyse_(canUseUi);
+     } catch (e) {
+-      if (canUseUi) {
+-        SpreadsheetApp.getUi().alert(`Configuration requise : ${e.message}`);
+-      } else if (notifyByEmail) {
+-        _notifyAutomatedFailure(`Configuration incomplète : ${e.message}`);
+-      }
+-      _updateProgressState({ status: "ERROR", errorMessage: e.message });
+-      _cleanupContinuationTriggers();
++      echouer(e.message, `Configuration requise : ${e.message}`);
+       return;
+     }
+-    const { apiKey, jobDescription, model, criteria, systemPrompt, config } = commonConfig;
++    const { config, criteres, reglages, empreinte, apiKey, annonce, contexte } = prep;
+ 
+-    const folderUrl = (config['URL du dossier Drive contenant les CVs'] || '').toString().trim();
++    const folderUrl = String(config.folderUrl || '').trim();
+     if (!folderUrl) {
+-      const errMsg = "L'URL du dossier Drive configurée est manquante.";
+-      if (canUseUi) {
+-        SpreadsheetApp.getUi().alert("Erreur de configuration : l'URL du dossier Drive est manquante.");
+-      } else if (notifyByEmail) {
+-        _notifyAutomatedFailure(errMsg);
+-      }
+-      _updateProgressState({ status: "ERROR", errorMessage: errMsg });
+-      _cleanupContinuationTriggers();
++      echouer("L'URL du dossier Drive des CV est manquante : renseignez-la dans le panneau de contrôle.");
+       return;
+     }
+-
+-    const accountType = (config['Type de compte Gemini'] || '').toString().trim();
+-    const isPaidAccount = accountType === "Payant (Pay-as-you-go)";
+-    const batchSize = isPaidAccount ? GEMINI_PAID_BATCH_SIZE : GEMINI_FREE_BATCH_SIZE;
+-    const batchPauseMs = isPaidAccount ? GEMINI_PAID_BATCH_PAUSE_MS : GEMINI_FREE_BATCH_PAUSE_MS;
+-
+     const folderId = getFolderIdFromUrl(folderUrl);
+     if (!folderId) {
+-      const errMsg = "L'URL du dossier Drive configurée est invalide.";
+-      if (canUseUi) {
+-        SpreadsheetApp.getUi().alert("Erreur de configuration : l'URL du dossier Drive semble invalide.");
+-      } else if (notifyByEmail) {
+-        _notifyAutomatedFailure(errMsg);
+-      }
+-      _updateProgressState({ status: "ERROR", errorMessage: errMsg });
+-      _cleanupContinuationTriggers();
++      echouer("L'URL du dossier Drive semble invalide : collez le lien du dossier (…/drive/folders/…).");
+       return;
+     }
+-
+     let folder;
+     try {
+       folder = DriveApp.getFolderById(folderId);
+     } catch (e) {
+-      const errMsg = `Impossible d'accéder au dossier Drive : ${e.message}`;
+-      if (canUseUi) {
+-        SpreadsheetApp.getUi().alert(`Erreur d'accès Drive : ${e.message}`);
+-      } else if (notifyByEmail) {
+-        _notifyAutomatedFailure(errMsg);
+-      }
+-      _updateProgressState({ status: "ERROR", errorMessage: errMsg });
+-      _cleanupContinuationTriggers();
++      echouer(`Impossible d'accéder au dossier Drive : ${e.message}. Vérifiez que votre compte y a accès.`);
+       return;
+     }
+ 
+-    const processedIds = {};
+-    const lastRow = resultsSheet.getLastRow();
+-    if (lastRow > 3) {
+-      const existingData = resultsSheet.getRange(4, 1, lastRow - 3, 13).getValues();
+-      for (let i = 0; i < existingData.length; i++) {
+-        const row = existingData[i];
+-        const reco = (row[COL_INDEX.RECOMMENDATION - 1] || '').toString().trim();
+-        const id = (row[COL_INDEX.FILE_ID - 1] || '').toString().trim();
+-        // Ne considérer comme déjà traité que si l'analyse a réussi (pas en statut Erreur)
+-        if (id && reco !== "Erreur") {
+-          processedIds[id] = true;
+-        }
+-      }
+-    }
++    const isPaidAccount = config.accountType === 'Payant (Pay-as-you-go)';
++    const batchSize = isPaidAccount ? GEMINI_PAID_BATCH_SIZE : GEMINI_FREE_BATCH_SIZE;
++    const batchPauseMs = isPaidAccount ? GEMINI_PAID_BATCH_PAUSE_MS : GEMINI_FREE_BATCH_PAUSE_MS;
++
++    // Quels fichiers sont à jour ? Un fichier l'est si l'une de ses lignes a
++    // été évaluée sous le référentiel courant, avec chaque critère actuel.
++    const lignesParFichier = new Map();
++    lireLignesResultats_(feuille, carte).forEach((ligne) => {
++      const fiche = ficheDeClassement_(ligne);
++      if (!fiche.id) return;
++      if (!lignesParFichier.has(fiche.id)) lignesParFichier.set(fiche.id, []);
++      lignesParFichier.get(fiche.id).push(fiche);
++    });
+ 
+-    const files = folder.getFiles();
+     const filesToProcess = [];
++    const decompte = { aJour: 0, nouveaux: 0, aReanalyser: 0, aRetenter: 0 };
++    const files = folder.getFiles();
+     while (files.hasNext()) {
+       const file = files.next();
+-      const fileName = file.getName();
+-      if (fileName.startsWith("tmp_")) continue;
+-      const mime = file.getMimeType();
+-      if (SUPPORTED_MIME_TYPES.includes(mime) && !processedIds[file.getId()]) {
+-        filesToProcess.push(file);
++      if (file.getName().startsWith('tmp_')) continue;
++      if (!SUPPORTED_MIME_TYPES.includes(file.getMimeType())) continue;
++      const existantes = lignesParFichier.get(file.getId());
++      if (existantes && existantes.some((f) => ficheEstAJour_(f, criteres, empreinte))) {
++        decompte.aJour++;
++        continue;
+       }
++      filesToProcess.push(file);
++      if (!existantes) decompte.nouveaux++;
++      else if (existantes.some((f) => f.recommandation === RECOMMANDATIONS.ERREUR)) decompte.aRetenter++;
++      else decompte.aReanalyser++;
+     }
+-
+-    const alreadyProcessedCount = Object.keys(processedIds).length;
+-    const totalFilesCount = filesToProcess.length + alreadyProcessedCount;
++    const totalFilesCount = filesToProcess.length + decompte.aJour;
+ 
+     if (filesToProcess.length === 0) {
++      // Rien à analyser, mais un poids, un niveau ou un seuil a pu changer : on reclasse.
++      const bilan = reclasser_({ feuille, carte, criteres, reglages, empreinte });
+       if (canUseUi) {
+-        SpreadsheetApp.getUi().alert("Aucun nouveau document à analyser. (PDF, Google Doc ou DOCX)");
++        SpreadsheetApp.getUi().alert(`Aucun CV à analyser : tous les documents du dossier sont à jour.\n\n${messageBilanClassement_(bilan)}`);
+       }
+       _updateProgressState({
+-        status: "COMPLETED",
+-        source: source,
++        status: 'COMPLETED',
++        source,
+         total: totalFilesCount,
+         processed: totalFilesCount,
+-        currentFileName: "Tous les documents sont à jour"
++        topContactCount: bilan.contacts,
++        currentFileName: 'Tous les documents sont à jour',
+       });
+       _cleanupContinuationTriggers();
+       return;
+     }
+ 
+-    // Confirmation uniquement en interactif classique (pas en reprise)
++    // Confirmation uniquement en interactif classique (pas en reprise) : l'analyse coûte des appels payants.
+     if (canUseUi) {
+       const ui = SpreadsheetApp.getUi();
++      const details = [
++        decompte.nouveaux && accorder_(decompte.nouveaux, 'nouveau', 'nouveaux'),
++        decompte.aReanalyser && `${decompte.aReanalyser} à réanalyser (annonce, grille, consignes ou modèle modifiés)`,
++        decompte.aRetenter && `${decompte.aRetenter} en erreur à retenter`,
++      ].filter(Boolean).join(', ');
+       const costResponse = ui.alert(
+-        "Confirmation",
+-        `Vous êtes sur le point d'analyser ${filesToProcess.length} nouveau${filesToProcess.length > 1 ? 'x' : ''} document${filesToProcess.length > 1 ? 's' : ''} avec le modèle ${model}.\nVoulez-vous lancer le traitement ?`,
+-        ui.ButtonSet.YES_NO
++        'Confirmation',
++        `${accorder_(filesToProcess.length, 'CV', 'CV')} à analyser : ${details}.\nModèle : ${config.model}. Grille : ${accorder_(criteres.length, 'critère')}.\n\nLancer l'analyse ?`,
++        ui.ButtonSet.YES_NO,
+       );
+       if (costResponse !== ui.Button.YES) {
+         _cleanupContinuationTriggers();
+         return;
+       }
+-      ss.toast(`Début de l'analyse : ${filesToProcess.length} document${filesToProcess.length > 1 ? 's' : ''} détecté${filesToProcess.length > 1 ? 's' : ''}.`, "Lancement 🚀");
++      ss.toast(`Début de l'analyse : ${accorder_(filesToProcess.length, 'document')}.`, 'Lancement 🚀');
+     }
+ 
+-    // Nettoyage des anciennes lignes Erreur pour les fichiers qui vont être réanalysés
+-    _removeOrphanErrorRows(resultsSheet, filesToProcess.map(f => f.getId()));
+-
+-    // Mise à jour de l'état initial dans PropertiesService
+     _updateProgressState({
+-      status: "RUNNING",
+-      source: source,
++      status: 'RUNNING',
++      source,
+       total: totalFilesCount,
+-      processed: alreadyProcessedCount,
++      processed: decompte.aJour,
+       successCount: 0,
+       errorCount: 0,
+-      currentFileName: "Démarrage des lots d'analyse..."
++      currentFileName: "Démarrage des lots d'analyse...",
+     });
+ 
+-    // Tentative de Context Caching si lot important
+-    let cacheName = null;
+-    if (filesToProcess.length >= 5) {
+-      if (canUseUi) ss.toast("Vérification du cache de contexte...", "Cache 🧠");
+-      cacheName = createGeminiCache(apiKey, model, systemPrompt, jobDescription, criteria);
+-    }
+-
+     let successCount = 0;
+     let errorCount = 0;
+     let stoppedByTimeout = false;
+@@ -244,126 +308,60 @@ function _runAnalysis(options) {
+ 
+     for (let batchStart = 0; batchStart < filesToProcess.length; batchStart += batchSize) {
+       const elapsed = Date.now() - startTime;
+-      
+-      // Contrôle de temps proactif AVANT d'engager le lot (si temps écoulé + max batch + 30s > 4m30)
++
++      // Contrôle de temps proactif AVANT d'engager le lot (si temps écoulé + plus long lot + 30 s > 4 min 30)
+       if (batchStart > 0 && elapsed + maxBatchDuration + 30000 > MAX_EXECUTION_TIME) {
+-        const remaining = filesToProcess.length - batchStart;
+-        if (remaining > 0) {
+-          _scheduleContinuationTrigger();
+-          _updateProgressState({
+-            status: "CONTINUING",
+-            source: source,
+-            currentFileName: "Reprise automatique programmée dans 1 min..."
+-          });
+-          if (canUseUi) {
+-            ss.toast("Temps limite approché. Reprise automatique à +1 min.", "Reprise ⏳", 8);
+-          }
+-          stoppedByTimeout = true;
+-          break;
+-        }
++        _scheduleContinuationTrigger();
++        _updateProgressState({ status: 'CONTINUING', source, currentFileName: 'Reprise automatique programmée dans 1 min...' });
++        if (canUseUi) ss.toast('Temps limite approché. Reprise automatique à +1 min.', 'Reprise ⏳', 8);
++        stoppedByTimeout = true;
++        break;
+       }
+ 
+       const batch = filesToProcess.slice(batchStart, batchStart + batchSize);
+       if (canUseUi) {
+-        ss.toast(`Traitement du lot ${Math.floor(batchStart / batchSize) + 1} (${batch.length} document${batch.length > 1 ? 's' : ''})...`, "Analyse 🔍");
++        ss.toast(`Traitement du lot ${Math.floor(batchStart / batchSize) + 1} (${accorder_(batch.length, 'document')})...`, 'Analyse 🔍');
+       }
+-
+       _updateProgressState({
+-        status: "RUNNING",
+-        source: source,
++        status: 'RUNNING',
++        source,
+         total: totalFilesCount,
+-        processed: alreadyProcessedCount + successCount + errorCount,
+-        currentFileName: batch[0].getName()
++        processed: decompte.aJour + successCount + errorCount,
++        currentFileName: batch[0].getName(),
+       });
+ 
+       const batchStartTime = Date.now();
+-      const batchResults = analyzeDocumentsBatch(batch, apiKey, model, jobDescription, criteria, systemPrompt, cacheName);
+-      const batchDuration = Date.now() - batchStartTime;
+-      if (batchDuration > maxBatchDuration) {
+-        maxBatchDuration = batchDuration;
+-      }
+-
+-      const rowsToAdd = [];
+-      const richTextLinks = [];
+-      const errorRowIndices = [];
+-
+-      batchResults.forEach(result => {
+-        if (result.analysis) {
+-          rowsToAdd.push([
+-            result.analysis.candidateName || "Inconnu",
+-            result.analysis.email || "Non renseigné",
+-            result.analysis.phone || "Non renseigné",
+-            result.analysis.experience || "",
+-            result.analysis.education || "",
+-            result.analysis.skills || "",
+-            result.analysis.strengths || "",
+-            result.analysis.weaknesses || "",
+-            result.analysis.recommendation || "À garder en vivier",
+-            result.analysis.score || 1,
+-            result.file.getName(),
+-            new Date(),
+-            result.file.getId()
+-          ]);
+-          richTextLinks.push({ name: result.file.getName(), url: result.file.getUrl() });
+-          allRecentCandidates.push({
+-            name: result.analysis.candidateName || "Inconnu",
+-            score: result.analysis.score || 1,
+-            reco: result.analysis.recommendation || "À garder en vivier"
+-          });
+-          successCount++;
+-        } else {
+-          Logger.log(`Erreur CV (${result.file.getName()}) : ${result.error}`);
+-          rowsToAdd.push([
+-            "Erreur d'analyse",
+-            "",
+-            "",
+-            "",
+-            "",
+-            "",
+-            `Une erreur s'est produite : ${result.error}`,
+-            "",
+-            "Erreur",
+-            0,
+-            result.file.getName(),
+-            new Date(),
+-            result.file.getId()
+-          ]);
+-          richTextLinks.push({ name: result.file.getName(), url: result.file.getUrl() });
+-          allRecentCandidates.push({
+-            name: result.file.getName(),
+-            score: 0,
+-            reco: "Erreur"
+-          });
+-          errorRowIndices.push(rowsToAdd.length - 1);
+-          errorCount++;
+-        }
++      const fiches = analyzeDocumentsBatch(batch, contexte)
++        .map((resultat) => ficheDepuisResultat_(resultat, { criteres, reglages, empreinte }));
++      maxBatchDuration = Math.max(maxBatchDuration, Date.now() - batchStartTime);
++
++      enregistrerFiches_(feuille, carte, fiches);
++      fiches.forEach((fiche) => {
++        if (fiche.enErreur) errorCount++;
++        else successCount++;
++        allRecentCandidates.push({
++          name: fiche.enErreur ? fiche.nomFichier : fiche.valeurs[COLONNES_RESULTATS.CANDIDAT],
++          score: fiche.valeurs[COLONNES_RESULTATS.SCORE],
++          reco: fiche.valeurs[COLONNES_RESULTATS.RECOMMANDATION],
++        });
+       });
+ 
+-      if (rowsToAdd.length > 0) {
+-        _appendBatchResults(resultsSheet, rowsToAdd, richTextLinks, errorRowIndices);
+-      }
+-
+-      // Mise à jour de la progression en direct
+       _updateProgressState({
+-        status: "RUNNING",
+-        source: source,
++        status: 'RUNNING',
++        source,
+         total: totalFilesCount,
+-        processed: alreadyProcessedCount + successCount + errorCount,
+-        successCount: successCount,
+-        errorCount: errorCount,
++        processed: decompte.aJour + successCount + errorCount,
++        successCount,
++        errorCount,
+         recentCandidates: allRecentCandidates.slice(-6),
+-        currentFileName: batch[batch.length - 1].getName()
++        currentFileName: batch[batch.length - 1].getName(),
+       });
+ 
+       // Pause entre lots pour respecter le quota RPM (si temps restant suffisant)
+       if (batchStart + batchSize < filesToProcess.length) {
+         if (Date.now() - startTime + batchPauseMs + 30000 > MAX_EXECUTION_TIME) {
+           _scheduleContinuationTrigger();
+-          _updateProgressState({
+-            status: "CONTINUING",
+-            source: source,
+-            currentFileName: "Reprise automatique au prochain lot (+1 min)..."
+-          });
++          _updateProgressState({ status: 'CONTINUING', source, currentFileName: 'Reprise automatique au prochain lot (+1 min)...' });
+           stoppedByTimeout = true;
+           break;
+         }
+@@ -371,78 +369,42 @@ function _runAnalysis(options) {
+       }
+     }
+ 
+-    // Nettoyage explicite du cache Gemini (plutôt que d'attendre son TTL)
+-    deleteGeminiCache(cacheName, apiKey);
++    if (stoppedByTimeout) return;
+ 
+-    // Si le traitement s'est terminé complètement (non interrompu par le timeout)
+-    if (!stoppedByTimeout) {
+-      _cleanupContinuationTriggers();
++    _cleanupContinuationTriggers();
++    const bilan = reclasser_({ feuille, carte, criteres, reglages, empreinte });
++    ecrireSynthese_(feuille, carte, annonce, apiKey, config.model, canUseUi);
+ 
+-      // Tri par note décroissante
+-      let topContactCount = 0;
+-      const finalLastRow = resultsSheet.getLastRow();
+-      if (finalLastRow > 3) {
+-        resultsSheet.getRange(4, 1, finalLastRow - 3, 13).sort({ column: COL_INDEX.SCORE, ascending: false });
+-        topContactCount = _optimizeContactRecommendations(resultsSheet);
+-      }
++    _updateProgressState({
++      status: 'COMPLETED',
++      source,
++      total: totalFilesCount,
++      processed: totalFilesCount,
++      successCount,
++      errorCount,
++      topContactCount: bilan.contacts,
++      currentFileName: 'Terminé avec succès',
++      recentCandidates: allRecentCandidates.slice(-6),
++    });
+ 
+-      // Synthèse globale
+-      if (resultsSheet.getLastRow() > 3) {
+-        const candidatesData = resultsSheet.getRange(4, 1, resultsSheet.getLastRow() - 3, 10).getValues();
+-        const summaryList = candidatesData
+-          .filter(c => c[COL_INDEX.RECOMMENDATION - 1] !== "Erreur")
+-          .map(c => `- ${c[0]} : Note ${c[COL_INDEX.SCORE - 1]}/5, Reco: ${c[COL_INDEX.RECOMMENDATION - 1]}`);
+-        
+-        if (summaryList.length > 0) {
+-          try {
+-            if (canUseUi) ss.toast("Génération de la synthèse...", "Synthèse 🧠", 10);
+-            const sessionSynthesis = generateSessionSynthesis(summaryList.join("\n"), jobDescription, apiKey, model);
+-            resultsSheet.getRange("A2").setValue(`Synthèse globale : ${sessionSynthesis}`);
+-          } catch (synthErr) {
+-            resultsSheet.getRange("A2").setValue("Synthèse globale : Analyse terminée.");
+-          }
+-        }
+-      }
++    let endMessage = `Analyse terminée : ${accorder_(successCount, 'CV évalué', 'CV évalués')}.\n${messageBilanClassement_(bilan)}`;
++    if (errorCount > 0) endMessage += `\n⚠️ ${accorder_(errorCount, 'fichier en erreur', 'fichiers en erreur')} cette fois-ci (motif dans la colonne « ${COLONNES_RESULTATS.MOTIF} »).`;
+ 
+-      _updateProgressState({
+-        status: "COMPLETED",
+-        source: source,
+-        total: totalFilesCount,
+-        processed: totalFilesCount,
+-        successCount: successCount,
+-        errorCount: errorCount,
+-        topContactCount: topContactCount,
+-        currentFileName: "Terminé avec succès",
+-        recentCandidates: allRecentCandidates.slice(-6)
+-      });
+-
+-      let endMessage = `Analyse terminée pour ${successCount} document${successCount > 1 ? 's' : ''}.`;
+-      if (successCount > 0) {
+-        endMessage += `\n🎯 ${topContactCount} profil${topContactCount > 1 ? 's retenus' : ' retenu'} pour la prise de contact (Top ${MAX_CONTACT_CANDIDATES} max qualifiés).`;
+-      }
+-      if (errorCount > 0) endMessage += `\n⚠️ ${errorCount} fichier(s) en erreur (pourront être réanalysés).`;
+-      
+-      if (canUseUi) {
+-        SpreadsheetApp.getUi().alert(`Bilan : ${endMessage}`);
+-      } else if (notifyByEmail) {
+-        const userEmail = Session.getEffectiveUser().getEmail() || Session.getActiveUser().getEmail();
+-        if (userEmail) {
+-          MailApp.sendEmail({
+-            to: userEmail,
+-            subject: "🤖 Analyse de CV terminée avec succès",
+-            body: `Bonjour,\n\nVotre analyse de CV automatique vient de se terminer.\n\n${endMessage}\n\nConsultez votre fichier Google Sheets pour découvrir les résultats.\n\nL'équipe AI.`
+-          });
+-        }
++    if (canUseUi) {
++      SpreadsheetApp.getUi().alert(`Bilan : ${endMessage}`);
++    } else if (notifyByEmail) {
++      const userEmail = Session.getEffectiveUser().getEmail() || Session.getActiveUser().getEmail();
++      if (userEmail) {
++        MailApp.sendEmail({
++          to: userEmail,
++          subject: '🤖 Analyse de CV terminée',
++          body: `Bonjour,\n\nVotre analyse de CV automatique vient de se terminer.\n\n${endMessage}\n\nConsultez le classeur pour découvrir les résultats.`,
++        });
+       }
+     }
+-
+   } catch (err) {
+-    Logger.log("Erreur globale _runAnalysis : " + err.message);
+-    _updateProgressState({
+-      status: "ERROR",
+-      source: source,
+-      errorMessage: err.message
+-    });
++    Logger.log(`Erreur globale _runAnalysis : ${err.message}`);
++    _updateProgressState({ status: 'ERROR', source, errorMessage: err.message });
+     if (canUseUi) {
+       SpreadsheetApp.getUi().alert(`Erreur : ${err.message}`);
+     } else if (notifyByEmail) {
+@@ -461,87 +423,70 @@ function _runAnalysis(options) {
+ function analyzeSingleCV() {
+   const lock = LockService.getScriptLock();
+   if (!lock.tryLock(5000)) {
+-    SpreadsheetApp.getActiveSpreadsheet().toast("Une analyse est déjà en cours.", "⏳");
++    SpreadsheetApp.getActiveSpreadsheet().toast('Une analyse est déjà en cours.', '⏳');
+     return;
+   }
+ 
+   try {
+     const ui = SpreadsheetApp.getUi();
+-    const response = ui.prompt("Analyser un seul CV", "Collez le lien Google Drive du document (PDF, Google Doc ou DOCX) :", ui.ButtonSet.OK_CANCEL);
++    const response = ui.prompt('Analyser un seul CV', 'Collez le lien Google Drive du document (PDF, Google Doc ou DOCX) :', ui.ButtonSet.OK_CANCEL);
+     if (response.getSelectedButton() !== ui.Button.OK) return;
+-    
++
+     const fileUrl = response.getResponseText().trim();
+     const match = fileUrl.match(/d\/([a-zA-Z0-9-_]+)/) || fileUrl.match(/id=([a-zA-Z0-9-_]+)/);
+     if (!match) {
+-      ui.alert("URL invalide. Assurez-vous qu'elle contient l'ID du document.");
++      ui.alert("URL invalide. Assurez-vous qu'elle contient l'identifiant du document.");
+       return;
+     }
+-    const fileId = match[1];
+ 
+     let file;
+     try {
+-      file = DriveApp.getFileById(fileId);
++      file = DriveApp.getFileById(match[1]);
+     } catch (e) {
+       ui.alert("Impossible d'accéder à ce fichier. Vérifiez vos droits de lecture.");
+       return;
+     }
+-    
++
+     const mime = file.getMimeType();
+     if (!SUPPORTED_MIME_TYPES.includes(mime)) {
+-      ui.alert(`Format non supporté (${mime}). Veuillez fournir un fichier au format PDF, DOCX ou un Google Doc.`);
++      ui.alert(`Format non supporté (${mime}). Fournissez un PDF, un DOCX ou un Google Doc.`);
+       return;
+     }
+ 
+-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+-    const resultsSheet = ss.getSheetByName(RESULTS_SHEET_NAME);
+-
+-    if (!resultsSheet) {
+-      ui.alert("Veuillez d'abord initialiser la feuille de résultats."); return;
+-    }
+-
+-    let commonConfig;
++    let feuille;
++    let carte;
++    let prep;
+     try {
+-      commonConfig = _prepareCommonConfig(true);
++      ({ feuille, carte } = ongletResultats_());
++      prep = preparerAnalyse_(true);
+     } catch (e) {
+-      ui.alert(`Configuration incomplète : ${e.message}`);
++      ui.alert(`Configuration requise : ${e.message}`);
+       return;
+     }
+-    const { apiKey, jobDescription, model, criteria, systemPrompt } = commonConfig;
+ 
+-    ss.toast("Analyse du document en cours...", "Analyse 🔍");
++    SpreadsheetApp.getActiveSpreadsheet().toast('Analyse du document en cours...', 'Analyse 🔍');
++    let fiche;
+     try {
+-      const analysis = analyzeSingleDocument(file, apiKey, model, jobDescription, criteria, systemPrompt, null);
+-      if (analysis.recommendation === "À contacter" && analysis.score < MIN_CONTACT_SCORE) {
+-        analysis.recommendation = analysis.score <= 2 ? "À refuser" : "À garder en vivier";
+-      }
+-
+-      const row = [
+-        analysis.candidateName || "Inconnu",
+-        analysis.email || "Non renseigné",
+-        analysis.phone || "Non renseigné",
+-        analysis.experience || "",
+-        analysis.education || "",
+-        analysis.skills || "",
+-        analysis.strengths || "",
+-        analysis.weaknesses || "",
+-        analysis.recommendation || "À garder en vivier",
+-        analysis.score || 1,
+-        file.getName(),
+-        new Date(),
+-        file.getId()
+-      ];
+-      _removeOrphanErrorRows(resultsSheet, [fileId]);
+-      _appendBatchResults(resultsSheet, [row], [{ name: file.getName(), url: file.getUrl() }], []);
+-
+-      ui.alert(`Analyse réussie pour : ${analysis.candidateName}\nRecommandation: ${analysis.recommendation}\nNote: ${analysis.score}/5`);
++      fiche = ficheDepuisResultat_({ file, analysis: analyzeSingleDocument(file, prep.contexte) }, prep);
+     } catch (err) {
+-      ui.alert("Erreur lors de l'analyse : " + err.message);
+-      const errorRow = [
+-        "Erreur d'analyse", "", "", "", "", "", `Une erreur s'est produite : ${err.message}`, "", "Erreur", 0, file.getName(), new Date(), file.getId()
+-      ];
+-      _removeOrphanErrorRows(resultsSheet, [fileId]);
+-      _appendBatchResults(resultsSheet, [errorRow], [{ name: file.getName(), url: file.getUrl() }], [0]);
++      fiche = ficheDepuisResultat_({ file, error: err.message }, prep);
++    }
++    enregistrerFiches_(feuille, carte, [fiche]);
++    reclasser_({ feuille, carte, criteres: prep.criteres, reglages: prep.reglages, empreinte: prep.empreinte });
++
++    const ligne = lireLignesResultats_(feuille, carte).find((l) => texteLigne_(l, COLONNES_RESULTATS.ID) === file.getId());
++    if (fiche.enErreur || !ligne) {
++      ui.alert(`Erreur lors de l'analyse : ${fiche.valeurs[COLONNES_RESULTATS.MOTIF]}`);
++      return;
+     }
++    const doublon = texteLigne_(ligne, COLONNES_RESULTATS.DOUBLON);
++    ui.alert([
++      `Analyse réussie pour : ${texteLigne_(ligne, COLONNES_RESULTATS.CANDIDAT)}`,
++      `Recommandation : ${texteLigne_(ligne, COLONNES_RESULTATS.RECOMMANDATION)}`,
++      `Score : ${valeurLigne_(ligne, COLONNES_RESULTATS.SCORE)}/100`,
++      `Motif : ${texteLigne_(ligne, COLONNES_RESULTATS.MOTIF)}`,
++      doublon ? `Doublon : ${doublon}` : '',
++    ].filter(Boolean).join('\n'));
+   } finally {
+     lock.releaseLock();
+   }
+@@ -555,12 +500,12 @@ function toggleDailyTrigger() {
+   for (const trigger of triggers) {
+     if (trigger.getHandlerFunction() === 'analyzeCVsAutomated') {
+       ScriptApp.deleteTrigger(trigger);
+-      SpreadsheetApp.getActiveSpreadsheet().toast("Analyse automatique désactivée.", "Off 🚫");
++      SpreadsheetApp.getActiveSpreadsheet().toast('Analyse automatique désactivée.', 'Off 🚫');
+       return;
+     }
+   }
+   ScriptApp.newTrigger('analyzeCVsAutomated').timeBased().everyDays(1).atHour(2).create();
+-  SpreadsheetApp.getActiveSpreadsheet().toast("Analyse automatique activée (quotidienne à 02h00).", "On ⏰");
++  SpreadsheetApp.getActiveSpreadsheet().toast('Analyse automatique activée (quotidienne à 02h00).', 'On ⏰');
+ }
+ 
+ function clearResults() {
+@@ -569,122 +514,19 @@ function clearResults() {
+   if (!sheet) return;
+ 
+   const ui = SpreadsheetApp.getUi();
+-  const response = ui.alert("Confirmation", "Voulez-vous vraiment vider tout le tableau des résultats d'analyse ?", ui.ButtonSet.YES_NO);
++  const response = ui.alert('Confirmation', "Voulez-vous vraiment vider tout le tableau des résultats d'analyse ? Les décisions RH et les dates de brouillon qu'il porte seront perdues.", ui.ButtonSet.YES_NO);
+ 
+   if (response === ui.Button.YES) {
+     const lastRow = sheet.getLastRow();
+-    if (lastRow > 3) {
+-      sheet.deleteRows(4, lastRow - 3);
++    if (lastRow > LIGNE_ENTETE_RESULTATS) {
++      sheet.deleteRows(PREMIERE_LIGNE_RESULTATS, lastRow - LIGNE_ENTETE_RESULTATS);
+     }
+-    sheet.getRange("A2").setValue("Synthèse globale : En attente du lancement de l'analyse pour générer les conseils de session...");
+-    _updateProgressState({ status: "IDLE", source: "interactive", total: 0, processed: 0, currentFileName: "" });
+-    ss.toast("Le tableau des résultats a été réinitialisé.", "Vidé 🧹");
++    sheet.getRange('A2').setValue("Synthèse globale : en attente du lancement de l'analyse...");
++    _updateProgressState({ status: 'IDLE', source: 'interactive', total: 0, processed: 0, currentFileName: '' });
++    ss.toast('Le tableau des résultats a été réinitialisé.', 'Vidé 🧹');
+   }
+ }
+ 
+-/**
+- * Supprime les anciennes lignes en statut 'Erreur' pour les fichiers qui vont être réanalysés.
+- * @param {GoogleAppsScript.Spreadsheet.Sheet} resultsSheet
+- * @param {string[]} fileIdsToProcess
+- */
+-function _removeOrphanErrorRows(resultsSheet, fileIdsToProcess) {
+-  const lastRow = resultsSheet.getLastRow();
+-  if (lastRow < 4 || !fileIdsToProcess || fileIdsToProcess.length === 0) return;
+-  
+-  const numRows = lastRow - 3;
+-  const data = resultsSheet.getRange(4, 1, numRows, 13).getValues();
+-  const fileIdSet = {};
+-  fileIdsToProcess.forEach(id => { fileIdSet[id] = true; });
+-
+-  for (let i = numRows - 1; i >= 0; i--) {
+-    const reco = (data[i][COL_INDEX.RECOMMENDATION - 1] || '').toString().trim();
+-    const id = (data[i][COL_INDEX.FILE_ID - 1] || '').toString().trim();
+-    if (reco === "Erreur" && fileIdSet[id]) {
+-      resultsSheet.deleteRow(4 + i);
+-    }
+-  }
+-}
+-
+-/**
+- * Écrit un lot de résultats dans la feuille et applique le formatage en une seule opération groupée.
+- */
+-function _appendBatchResults(resultsSheet, rows, richTextLinks, errorIndices) {
+-  const startRow = resultsSheet.getLastRow() + 1;
+-  const numRows = rows.length;
+-  
+-  // 1. Appliquer le format texte sur la colonne téléphone AVANT d'insérer les valeurs
+-  resultsSheet.getRange(startRow, COL_INDEX.PHONE, numRows, 1).setNumberFormat("@");
+-
+-  // 2. Écrire les données du lot
+-  const range = resultsSheet.getRange(startRow, 1, numRows, 13);
+-  range.setValues(rows);
+-  range.setVerticalAlignment("top").setWrap(true).setFontFamily("Inter");
+-
+-  // 3. Formatage des liens RichText pour les fichiers
+-  const richTextValues = richTextLinks.map(link => [
+-    SpreadsheetApp.newRichTextValue().setText(link.name).setLinkUrl(link.url).build()
+-  ]);
+-  resultsSheet.getRange(startRow, COL_INDEX.FILE_LINK, numRows, 1)
+-    .setRichTextValues(richTextValues)
+-    .setHorizontalAlignment("center")
+-    .setFontColor("#64748b");
+-
+-  resultsSheet.getRange(startRow, COL_INDEX.RECOMMENDATION, numRows, 1).setHorizontalAlignment("center").setFontWeight("bold");
+-  resultsSheet.getRange(startRow, COL_INDEX.SCORE, numRows, 1).setHorizontalAlignment("center").setFontWeight("bold").setNumberFormat("0");
+-  resultsSheet.getRange(startRow, COL_INDEX.DATE, numRows, 1).setHorizontalAlignment("center").setNumberFormat("dd/MM/yyyy HH:mm");
+-
+-  if (errorIndices && errorIndices.length > 0) {
+-    errorIndices.forEach(idx => {
+-      resultsSheet.getRange(startRow + idx, 1, 1, 13).setFontColor("#dc2626");
+-    });
+-  }
+-
+-  // 4. Forcer la synchronisation avec la feuille
+-  SpreadsheetApp.flush();
+-}
+-
+-/**
+- * Harmonise les recommandations de prise de contact après analyse et tri.
+- * N'écrit QUE sur la colonne Recommandation (col 9) pour préserver strictement les liens et les formats de téléphones.
+- * @param {GoogleAppsScript.Spreadsheet.Sheet} resultsSheet
+- * @returns {number} Nombre de candidats retenus en prise de contact
+- */
+-function _optimizeContactRecommendations(resultsSheet) {
+-  const lastRow = resultsSheet.getLastRow();
+-  if (lastRow < 4) return 0;
+-
+-  const numRows = lastRow - 3;
+-  const data = resultsSheet.getRange(4, COL_INDEX.RECOMMENDATION, numRows, 2).getValues();
+-  
+-  const candidateObjects = data.map(row => ({
+-    recommendation: row[0],
+-    score: row[1]
+-  }));
+-
+-  const newRecos = computeContactRecommendations(candidateObjects, MAX_CONTACT_CANDIDATES, MIN_CONTACT_SCORE);
+-
+-  let hasChanges = false;
+-  let contactCount = 0;
+-  const recoColumnData = [];
+-
+-  for (let i = 0; i < numRows; i++) {
+-    const updatedReco = newRecos[i];
+-    if (updatedReco === "À contacter") {
+-      contactCount++;
+-    }
+-    if (updatedReco !== data[i][0]) {
+-      hasChanges = true;
+-    }
+-    recoColumnData.push([updatedReco]);
+-  }
+-
+-  if (hasChanges) {
+-    resultsSheet.getRange(4, COL_INDEX.RECOMMENDATION, numRows, 1).setValues(recoColumnData);
+-  }
+-
+-  return contactCount;
+-}
+-
+ /**
+  * Met à jour l'état du traitement dans PropertiesService via la fonction pure mergeJobState.
+  * @param {Object} stateUpdates
+@@ -700,7 +542,7 @@ function _updateProgressState(stateUpdates) {
+     const newState = mergeJobState(currentState, stateUpdates);
+     props.setProperty(PROP_KEY_JOB_STATE, JSON.stringify(newState));
+   } catch (e) {
+-    Logger.log("Erreur mise à jour état progression : " + e.message);
++    Logger.log(`Erreur mise à jour état progression : ${e.message}`);
+   }
+ }
+ 
+@@ -716,7 +558,7 @@ function _cleanupContinuationTriggers() {
+       }
+     }
+   } catch (e) {
+-    Logger.log("Erreur nettoyage déclencheurs de reprise : " + e.message);
++    Logger.log(`Erreur nettoyage déclencheurs de reprise : ${e.message}`);
+   }
+ }
+ 
+@@ -729,7 +571,7 @@ function _scheduleContinuationTrigger() {
+     .timeBased()
+     .after(60 * 1000)
+     .create();
+-  Logger.log("Déclencheur de reprise automatique programmé dans 1 minute.");
++  Logger.log('Déclencheur de reprise automatique programmé dans 1 minute.');
+ }
+ 
+ /**
+@@ -742,40 +584,3 @@ function _scheduleWatchdogTrigger() {
+     .after(7 * 60 * 1000)
+     .create();
+ }
+-
+-/**
+- * Prépare la configuration et valide les paramètres communs.
+- * @param {boolean} canUseUi
+- * @returns {{apiKey: string, jobDescription: string, model: string, criteria: string, systemPrompt: string, config: Object}}
+- */
+-function _prepareCommonConfig(canUseUi) {
+-  const config = getConfig();
+-  const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+-  const annonceInput = (config.jobDescription || config["URL ou texte de l'annonce"] || '').toString().trim();
+-  const model = (config.model || config['Modèle Gemini'] || 'gemini-3.7-flash').toString().trim();
+-  const criteria = (config.criteria || config['Critères spécifiques du recruteur'] || '').toString().trim();
+-  const rawSystemPrompt = (config.systemPrompt || config['Prompt système'] || '').toString().trim();
+-
+-  if (!apiKey) {
+-    throw new Error("Clé API manquante. Utilisez le menu '🔑 Configurer la clé API'.");
+-  }
+-  if (!annonceInput) {
+-    throw new Error("URL ou texte de l'annonce manquant dans la configuration.");
+-  }
+-
+-  let jobDescription = annonceInput;
+-  if (annonceInput.startsWith("http://") || annonceInput.startsWith("https://")) {
+-    if (canUseUi) SpreadsheetApp.getActiveSpreadsheet().toast("Chargement de l'annonce...", "Annonce 📄");
+-    const allowedDomainsStr = (config.allowedDomains || config['Domaines autorisés'] || DEFAULT_ALLOWED_DOMAINS.join(", ")).toString().trim();
+-    jobDescription = extractJobDescriptionWithGemini(fetchJobDescription(annonceInput, allowedDomainsStr), apiKey, model);
+-  }
+-
+-  let systemPrompt = DEFAULT_PROMPT;
+-  if (rawSystemPrompt.includes('{{JOB_DESCRIPTION}}') && rawSystemPrompt.includes('{{CRITERIA}}')) {
+-    systemPrompt = rawSystemPrompt;
+-  } else if (rawSystemPrompt !== "" && rawSystemPrompt !== DEFAULT_PROMPT) {
+-    if (canUseUi) SpreadsheetApp.getActiveSpreadsheet().toast("Prompt personnalisé invalide. Utilisation du prompt par défaut.", "⚠️ Attention");
+-  }
+-
+-  return { apiKey, jobDescription, model, criteria, systemPrompt, config };
+-}

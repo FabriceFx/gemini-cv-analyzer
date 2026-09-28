@@ -1,0 +1,568 @@
+diff --git a/Sidebar.html b/Sidebar.html
+index 524e229..f81b335 100644
+--- a/Sidebar.html
++++ b/Sidebar.html
+@@ -289,6 +289,19 @@
+     .toast.success { background: var(--success-bg); color: var(--success); border: 1px solid #bbf7d0; display: block; }
+     .toast.error { background: var(--danger-bg); color: var(--danger); border: 1px solid #fecaca; display: block; }
+     .toast.info { background: var(--primary-light); color: var(--primary); border: 1px solid #bfdbfe; display: block; }
++
++    /* Aides, grille, sélection */
++    .hint { font-size: 10.5px; color: var(--text-muted); margin-top: 3px; line-height: 1.4; }
++    .grid-summary { font-size: 11px; color: #334155; background: var(--surface-variant); border-radius: var(--radius-sm); padding: 6px 8px; margin-bottom: 8px; }
++    .grid-summary.warn { background: var(--warning-bg); color: #92400e; }
++    .grid-summary.error { background: var(--danger-bg); color: var(--danger); }
++    .btn-row { display: flex; gap: 6px; }
++    .btn-row .btn { margin-top: 0; }
++    .field-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
++    .detail-content.multiline { white-space: pre-line; }
++    .badge.duplicate { background: #f1f5f9; color: #475569; }
++    .badge.stale { background: var(--primary-light); color: var(--primary); }
++    .app-footer { text-align: center; font-size: 10px; color: var(--text-muted); margin-top: 12px; }
+   </style>
+ </head>
+ <body>
+@@ -328,24 +341,37 @@
+       </div>
+ 
+       <div class="card">
+-        <div class="card-title">⚙️ Paramètres IA</div>
+-        <div class="form-group">
+-          <label for="modelSelect">Modèle Gemini</label>
+-          <select id="modelSelect">
+-            <option value="gemini-3.7-flash">gemini-3.7-flash (Recommandé)</option>
+-          </select>
++        <div class="card-title">🎯 Grille d'évaluation</div>
++        <div id="gridSummary" class="grid-summary">Chargement…</div>
++        <div class="btn-row">
++          <button type="button" id="btnProposeGrid" class="btn btn-secondary" onclick="proposeGrid()">✨ Proposer</button>
++          <button type="button" class="btn btn-secondary" onclick="openGrid()">📋 Ouvrir</button>
+         </div>
+-        <div class="form-group">
+-          <label for="accountTypeSelect">Type de compte Gemini</label>
+-          <select id="accountTypeSelect">
+-            <option value="Gratuit (Free tier)">Gratuit (Free tier - 3 CVs/12s)</option>
+-            <option value="Payant (Pay-as-you-go)">Payant (Pay-as-you-go - Rapide & RGPD)</option>
+-          </select>
++        <p class="hint">Chaque CV est évalué critère par critère ; le score sur 100 est calculé à partir des niveaux et des poids de la grille.</p>
++        <div class="form-group" style="margin-top: 8px;">
++          <label for="criteriaInput">Consignes d'évaluation (optionnel)</label>
++          <textarea id="criteriaInput" class="input-control" placeholder="Ex. : une alternance compte comme expérience professionnelle."></textarea>
++          <p class="hint">Ce qui aide à juger les critères (équivalences admises…). Les exigences elles-mêmes vont dans la grille.</p>
+         </div>
+-        <div class="form-group">
+-          <label for="criteriaInput">Critères spécifiques (optionnel)</label>
+-          <input type="text" id="criteriaInput" class="input-control" placeholder="Ex: Expérience React 3+ ans..." />
++      </div>
++
++      <div class="card">
++        <div class="card-title">⚖️ Sélection</div>
++        <div class="field-row">
++          <div class="form-group">
++            <label for="seuilContactInput">Contact ≥</label>
++            <input type="number" id="seuilContactInput" class="input-control" min="0" max="100" step="1" />
++          </div>
++          <div class="form-group">
++            <label for="seuilVivierInput">Vivier ≥</label>
++            <input type="number" id="seuilVivierInput" class="input-control" min="0" max="100" step="1" />
++          </div>
++          <div class="form-group">
++            <label for="placesContactInput">Places max</label>
++            <input type="number" id="placesContactInput" class="input-control" min="1" max="100" step="1" />
++          </div>
+         </div>
++        <p class="hint">« À contacter » : score au moins égal au seuil et indispensables démontrés, dans la limite des places, sans jamais compléter. Changer ces réglages ne demande pas de réanalyse.</p>
+       </div>
+ 
+       <details class="card" style="margin-top: 8px;">
+@@ -353,6 +379,20 @@
+           ⚙️ Options avancées
+         </summary>
+         <div style="margin-top: 10px;">
++          <div class="form-group">
++            <label for="modelSelect">Modèle Gemini</label>
++            <select id="modelSelect">
++              <option value="gemini-3.7-flash">gemini-3.7-flash (Recommandé)</option>
++            </select>
++            <p class="hint">Changer de modèle fait réanalyser les CV : des évaluations de deux modèles ne se comparent pas.</p>
++          </div>
++          <div class="form-group">
++            <label for="accountTypeSelect">Type de compte Gemini</label>
++            <select id="accountTypeSelect">
++              <option value="Gratuit (Free tier)">Gratuit (Free tier - 3 CVs/12s)</option>
++              <option value="Payant (Pay-as-you-go)">Payant (Pay-as-you-go - Rapide & RGPD)</option>
++            </select>
++          </div>
+           <div class="form-group">
+             <label for="retentionDaysInput">Rétention RGPD (jours)</label>
+             <input type="number" id="retentionDaysInput" class="input-control" value="730" min="30" max="3650" />
+@@ -363,7 +403,7 @@
+           </div>
+           <div class="form-group">
+             <label for="systemPromptInput">Prompt système personnalisé</label>
+-            <textarea id="systemPromptInput" class="input-control" style="height: 80px; font-size: 10.5px;" placeholder="Doit contenir {{JOB_DESCRIPTION}} et {{CRITERIA}}"></textarea>
++            <textarea id="systemPromptInput" class="input-control" style="height: 80px; font-size: 10.5px;" placeholder="Vide : prompt par défaut, qui suit les mises à jour de l'outil. Un prompt personnalisé doit contenir {{JOB_DESCRIPTION}} et {{CRITERIA}}."></textarea>
+           </div>
+         </div>
+       </details>
+@@ -371,9 +411,10 @@
+       <button type="submit" id="btnLaunch" class="btn btn-primary" style="margin-top: 12px;">
+         <span>🚀 Lancer l'analyse</span>
+       </button>
+-      <button type="button" class="btn btn-secondary" onclick="saveOnlyConfig()">
+-        💾 Sauvegarder la config
+-      </button>
++      <div class="btn-row" style="margin-top: 6px;">
++        <button type="button" class="btn btn-secondary" onclick="saveOnlyConfig()">💾 Sauvegarder</button>
++        <button type="button" id="btnRerank" class="btn btn-secondary" onclick="rerank()" title="Après un changement de niveau, de poids ou de seuil : sans appel à Gemini">🔁 Reclasser</button>
++      </div>
+     </form>
+   </div>
+ 
+@@ -397,7 +438,7 @@
+         </div>
+         <div class="stat-card">
+           <div id="statTopContact" class="stat-val">0</div>
+-          <div class="stat-lbl">À contacter (Top 10)</div>
++          <div id="statTopContactLabel" class="stat-lbl">À contacter</div>
+         </div>
+       </div>
+ 
+@@ -440,7 +481,7 @@
+           <div id="cardCandidateName" class="candidate-name">Candidat</div>
+           <span id="cardBadgeReco" class="badge contact" style="margin-top: 3px; display: inline-block;">À contacter</span>
+         </div>
+-        <div id="cardScore" class="score-chip">5 / 5</div>
++        <div id="cardScore" class="score-chip">—</div>
+       </div>
+ 
+       <div class="detail-section">
+@@ -452,8 +493,23 @@
+       </div>
+ 
+       <div class="detail-section">
+-        <div class="detail-title">🎯 Top 3 Compétences</div>
+-        <div class="detail-content" id="cardSkills">-</div>
++        <div class="detail-title">🧭 Motif de la recommandation</div>
++        <div class="detail-content" id="cardMotif">-</div>
++      </div>
++
++      <div class="detail-section" id="cardDecisionSection" style="display: none;">
++        <div class="detail-title">🧑‍💼 Décision RH</div>
++        <div class="detail-content" id="cardDecision">-</div>
++      </div>
++
++      <div class="detail-section" id="cardDoublonSection" style="display: none;">
++        <div class="detail-title">👥 Doublon</div>
++        <div class="detail-content" id="cardDoublon">-</div>
++      </div>
++
++      <div class="detail-section">
++        <div class="detail-title">🎯 Détail du score</div>
++        <div class="detail-content multiline" id="cardDetail">-</div>
+       </div>
+ 
+       <div class="detail-section">
+@@ -481,19 +537,22 @@
+     </div>
+   </div>
+ 
++  <div id="appFooter" class="app-footer">Analyseur de CV · Fabrice Faucheux — faucheux.bzh</div>
++
+   <script>
+     let pollingInterval = null;
+-    let currentCandidateRow = null;
++    let currentCandidateId = null;
++    let placesContact = 10;
+ 
+     window.addEventListener('DOMContentLoaded', () => {
+       loadInitialData();
+     });
+ 
+-    function showToast(msg, type = 'info') {
++    function showToast(msg, type = 'info', duree = 4000) {
+       const el = document.getElementById('toastMessage');
+       el.textContent = msg;
+       el.className = `toast ${type}`;
+-      setTimeout(() => { el.style.display = 'none'; }, 4000);
++      setTimeout(() => { el.style.display = 'none'; }, duree);
+     }
+ 
+     function switchTab(tabId) {
+@@ -516,6 +575,10 @@
+         .withSuccessHandler(data => {
+           if (!data) return;
+ 
++          if (data.version) {
++            document.getElementById('appFooter').textContent = `Analyseur de CV v${data.version} · Fabrice Faucheux — faucheux.bzh`;
++          }
++
+           // Remplissage dynamique des modèles
+           if (data.availableModels && data.availableModels.length > 0) {
+             populateModelSelect(data.availableModels, data.config ? data.config.model : 'gemini-3.7-flash');
+@@ -530,9 +593,13 @@
+             document.getElementById('retentionDaysInput').value = data.config.retentionDays || 730;
+             document.getElementById('allowedDomainsInput').value = data.config.allowedDomains || '';
+             document.getElementById('systemPromptInput').value = data.config.systemPrompt || '';
++            document.getElementById('seuilContactInput').value = data.config.seuilContact;
++            document.getElementById('seuilVivierInput').value = data.config.seuilVivier;
++            document.getElementById('placesContactInput').value = data.config.placesContact;
++            placesContact = data.config.placesContact;
+           }
+ 
+-          // Remplissage sélecteur candidat
++          renderGridSummary(data.grille);
+           populateCandidatePicker(data.candidatesList, data.selectedCandidate);
+ 
+           // État du job
+@@ -548,6 +615,27 @@
+         .getSidebarInitialData();
+     }
+ 
++    // Rendu en textContent uniquement : les critères viennent d'un onglet que n'importe quel éditeur peut remplir.
++    function renderGridSummary(grille) {
++      const el = document.getElementById('gridSummary');
++      if (!grille) { el.textContent = 'Grille illisible.'; el.className = 'grid-summary error'; return; }
++      if (grille.erreurs && grille.erreurs.length > 0) {
++        el.textContent = `À corriger : ${grille.erreurs.join(' ')}`;
++        el.className = 'grid-summary error';
++        return;
++      }
++      if (!grille.nombre) {
++        el.textContent = "Vide : l'analyse ne peut pas démarrer. Proposez une grille depuis l'annonce, puis relisez-la.";
++        el.className = 'grid-summary warn';
++        return;
++      }
++      const indisp = grille.indispensables && grille.indispensables.length
++        ? ` dont ${grille.indispensables.length} indispensable${grille.indispensables.length > 1 ? 's' : ''} (${grille.indispensables.join(', ')})`
++        : ', aucun indispensable';
++      el.textContent = `${grille.nombre} critère${grille.nombre > 1 ? 's' : ''}${indisp}.`;
++      el.className = 'grid-summary';
++    }
++
+     function populateModelSelect(models, selectedModel) {
+       const select = document.getElementById('modelSelect');
+       select.innerHTML = '';
+@@ -560,6 +648,10 @@
+       });
+     }
+ 
++    function formatScore(score) {
++      return score === '' || score === null || score === undefined ? '—' : `${score}/100`;
++    }
++
+     function populateCandidatePicker(candidates, selected) {
+       const picker = document.getElementById('candidatePicker');
+       picker.innerHTML = '<option value="">-- Choisir un profil --</option>';
+@@ -567,14 +659,14 @@
+       if (candidates && candidates.length > 0) {
+         candidates.forEach(c => {
+           const opt = document.createElement('option');
+-          opt.value = c.rowNumber;
+-          opt.textContent = `${c.name} (${c.score}/5 - ${c.recommendation})`;
++          opt.value = c.fileId;
++          opt.textContent = `${c.name} (${formatScore(c.score)} - ${c.recommendation})`;
+           picker.appendChild(opt);
+         });
+       }
+ 
+       if (selected) {
+-        picker.value = selected.rowNumber;
++        picker.value = selected.fileId;
+         renderCandidateCard(selected);
+       }
+     }
+@@ -583,18 +675,18 @@
+       google.script.run
+         .withSuccessHandler(candidate => {
+           if (candidate) {
+-            document.getElementById('candidatePicker').value = candidate.rowNumber;
++            document.getElementById('candidatePicker').value = candidate.fileId;
+             renderCandidateCard(candidate);
+             showToast(`Fiche chargée : ${candidate.name}`, "success");
+           } else {
+-            showToast("Veuillez sélectionner une ligne de candidat dans la feuille de résultats.", "info");
++            showToast("Sélectionnez une ligne de candidat dans l'onglet des résultats.", "info");
+           }
+         })
+         .getSelectedCandidateDetails();
+     }
+ 
+-    function loadCandidateDetails(rowNumber) {
+-      if (!rowNumber) {
++    function loadCandidateDetails(fileId) {
++      if (!fileId) {
+         document.getElementById('candidateDetailsCard').style.display = 'none';
+         document.getElementById('emptyCandidatePrompt').style.display = 'block';
+         return;
+@@ -604,30 +696,48 @@
+         .withSuccessHandler(candidate => {
+           if (candidate) {
+             renderCandidateCard(candidate);
++          } else {
++            showToast("Candidat introuvable : la liste a changé, elle est rechargée.", "info");
++            refreshCandidatesOnly();
+           }
+         })
+-        .getCandidateDetailsByRow(Number(rowNumber));
++        .getCandidateDetails(fileId);
++    }
++
++    function badgeClass(reco) {
++      if (reco === "À contacter") return "badge contact";
++      if (reco === "À refuser") return "badge reject";
++      if (reco === "Erreur") return "badge error";
++      if (reco === "Doublon") return "badge duplicate";
++      if (reco === "À réanalyser") return "badge stale";
++      return "badge pool";
+     }
+ 
+     // Rendu 100% sécurisé sans aucun innerHTML sur les données candidates
+     function renderCandidateCard(candidate) {
+-      currentCandidateRow = candidate.rowNumber;
++      currentCandidateId = candidate.fileId;
+       document.getElementById('cardCandidateName').textContent = candidate.name || 'Inconnu';
+-      document.getElementById('cardScore').textContent = `${candidate.score} / 5`;
+-      
++      document.getElementById('cardScore').textContent = formatScore(candidate.score);
++
+       const badge = document.getElementById('cardBadgeReco');
+-      badge.textContent = candidate.recommendation;
+-      if (candidate.recommendation === "À contacter") badge.className = "badge contact";
+-      else if (candidate.recommendation === "À refuser") badge.className = "badge reject";
+-      else if (candidate.recommendation === "Erreur") badge.className = "badge error";
+-      else badge.className = "badge pool";
++      badge.textContent = candidate.recommendation || '—';
++      badge.className = badgeClass(candidate.recommendation);
+ 
+       document.getElementById('cardEmailVal').textContent = candidate.email || 'Non renseigné';
+       document.getElementById('cardPhoneVal').textContent = candidate.phone || 'Non renseigné';
+-      document.getElementById('cardSkills').textContent = candidate.skills || 'Non renseigné';
++      document.getElementById('cardMotif').textContent = candidate.motif || '—';
++      document.getElementById('cardDetail').textContent = candidate.detail || 'Pas de détail : CV à (ré)analyser.';
+       document.getElementById('cardStrengths').textContent = candidate.strengths || 'Aucun point fort mentionné';
+       document.getElementById('cardWeaknesses').textContent = candidate.weaknesses || 'Aucun point de vigilance';
+ 
++      const decisionSection = document.getElementById('cardDecisionSection');
++      decisionSection.style.display = candidate.decision ? 'block' : 'none';
++      document.getElementById('cardDecision').textContent = candidate.decision || '';
++
++      const doublonSection = document.getElementById('cardDoublonSection');
++      doublonSection.style.display = candidate.doublon ? 'block' : 'none';
++      document.getElementById('cardDoublon').textContent = candidate.doublon || '';
++
+       const driveLink = document.getElementById('cardDriveLink');
+       if (candidate.fileUrl) {
+         driveLink.href = candidate.fileUrl;
+@@ -636,24 +746,29 @@
+         driveLink.style.display = 'none';
+       }
+ 
++      const btnDraft = document.getElementById('btnDraftEmail');
++      btnDraft.textContent = candidate.brouillon ? `✉️ Fait le ${candidate.brouillon}` : '✉️ Brouillon';
++      btnDraft.disabled = Boolean(candidate.brouillon);
++
+       document.getElementById('candidateDetailsCard').style.display = 'block';
+       document.getElementById('emptyCandidatePrompt').style.display = 'none';
+     }
+ 
+     function draftCandidateEmail() {
+-      if (!currentCandidateRow) return;
++      if (!currentCandidateId) return;
+       const btn = document.getElementById('btnDraftEmail');
+       btn.disabled = true;
+       btn.textContent = "Rédaction...";
+ 
+       google.script.run
+         .withSuccessHandler(res => {
+-          btn.disabled = false;
+-          btn.textContent = "✉️ Brouillon";
+           if (res && res.ok) {
+             showToast(res.message, "success");
++            loadCandidateDetails(currentCandidateId);
+           } else {
+-            showToast(res ? res.message : "Erreur de création", "error");
++            btn.disabled = false;
++            btn.textContent = "✉️ Brouillon";
++            showToast(res ? res.message : "Erreur de création", "error", 7000);
+           }
+         })
+         .withFailureHandler(err => {
+@@ -661,7 +776,7 @@
+           btn.textContent = "✉️ Brouillon";
+           showToast("Erreur : " + err.message, "error");
+         })
+-        .draftSingleCandidateEmail(currentCandidateRow);
++        .draftSingleCandidateEmail(currentCandidateId);
+     }
+ 
+     function getFormData() {
+@@ -673,7 +788,10 @@
+         criteria: document.getElementById('criteriaInput').value.trim(),
+         retentionDays: Number(document.getElementById('retentionDaysInput').value) || 730,
+         allowedDomains: document.getElementById('allowedDomainsInput').value.trim(),
+-        systemPrompt: document.getElementById('systemPromptInput').value.trim()
++        systemPrompt: document.getElementById('systemPromptInput').value.trim(),
++        seuilContact: Number(document.getElementById('seuilContactInput').value),
++        seuilVivier: Number(document.getElementById('seuilVivierInput').value),
++        placesContact: Number(document.getElementById('placesContactInput').value)
+       };
+     }
+ 
+@@ -681,8 +799,78 @@
+       const data = getFormData();
+       google.script.run
+         .withSuccessHandler(res => {
+-          if (res && res.ok) showToast("Configuration sauvegardée.", "success");
+-          else showToast("Erreur : " + (res ? res.message : "Inconnue"), "error");
++          if (res && res.ok) {
++            placesContact = data.placesContact;
++            showToast("Configuration sauvegardée.", "success");
++          } else {
++            showToast("Erreur : " + (res ? res.message : "Inconnue"), "error", 8000);
++          }
++        })
++        .saveSidebarConfig(data);
++    }
++
++    function proposeGrid() {
++      const data = getFormData();
++      if (!data.jobDescription) {
++        showToast("Renseignez d'abord l'annonce (texte ou URL).", "error");
++        return;
++      }
++      const btn = document.getElementById('btnProposeGrid');
++      btn.disabled = true;
++      btn.textContent = '⏳ Lecture…';
++      google.script.run
++        .withSuccessHandler(res => {
++          btn.disabled = false;
++          btn.textContent = '✨ Proposer';
++          if (res && res.ok) {
++            renderGridSummary(res.grille);
++            showToast(res.message, "success", 12000);
++          } else {
++            showToast(res ? res.message : "Erreur", "error", 9000);
++          }
++        })
++        .withFailureHandler(err => {
++          btn.disabled = false;
++          btn.textContent = '✨ Proposer';
++          showToast("Erreur : " + err.message, "error");
++        })
++        .proposerGrilleDepuisPanneau(data);
++    }
++
++    function openGrid() {
++      google.script.run
++        .withSuccessHandler(() => showToast("Grille ouverte. Relisez les niveaux : un indispensable non démontré fait refuser le CV.", "info", 7000))
++        .withFailureHandler(err => showToast("Erreur : " + err.message, "error"))
++        .ouvrirGrilleEvaluation();
++    }
++
++    function rerank() {
++      const data = getFormData();
++      const btn = document.getElementById('btnRerank');
++      btn.disabled = true;
++      google.script.run
++        .withSuccessHandler(res => {
++          if (!res || !res.ok) {
++            btn.disabled = false;
++            showToast(res ? res.message : "Erreur d'enregistrement", "error", 8000);
++            return;
++          }
++          placesContact = data.placesContact;
++          google.script.run
++            .withSuccessHandler(bilan => {
++              btn.disabled = false;
++              showToast(bilan.message, bilan.ok ? "success" : "error", 12000);
++              if (bilan.ok) refreshCandidatesOnly();
++            })
++            .withFailureHandler(err => {
++              btn.disabled = false;
++              showToast("Erreur : " + err.message, "error");
++            })
++            .recalculerClassementDepuisPanneau();
++        })
++        .withFailureHandler(err => {
++          btn.disabled = false;
++          showToast("Erreur : " + err.message, "error");
+         })
+         .saveSidebarConfig(data);
+     }
+@@ -703,10 +891,11 @@
+           btn.disabled = false;
+           btn.innerHTML = '<span>🚀 Lancer l\'analyse</span>';
+           if (res && res.ok) {
++            placesContact = data.placesContact;
+             switchTab('tabProgress');
+             startPolling();
+           } else {
+-            showToast(res ? res.message : "Erreur au lancement", "error");
++            showToast(res ? res.message : "Erreur au lancement", "error", 9000);
+           }
+         })
+         .withFailureHandler(err => {
+@@ -760,7 +949,7 @@
+                 // Recharger uniquement les candidats sans écraser le formulaire
+                 refreshCandidatesOnly();
+               } else if (state.status === 'ERROR') {
+-                showToast("Analyse interrompue : " + (state.errorMessage || "Erreur inconnue"), "error");
++                showToast("Analyse interrompue : " + (state.errorMessage || "Erreur inconnue"), "error", 9000);
+               } else if (state.status === 'BUSY') {
+                 showToast(state.errorMessage || "Une analyse est déjà en cours d'exécution.", "info");
+               }
+@@ -779,6 +968,7 @@
+           if (data && data.candidatesList) {
+             populateCandidatePicker(data.candidatesList, data.selectedCandidate);
+           }
++          if (data && data.grille) renderGridSummary(data.grille);
+         })
+         .getSidebarInitialData();
+     }
+@@ -803,6 +993,7 @@
+       bar.style.width = `${pct}%`;
+       statProcessed.textContent = `${state.processed || 0} / ${state.total || 0}`;
+       statTopContact.textContent = state.topContactCount || 0;
++      document.getElementById('statTopContactLabel').textContent = `À contacter (max ${placesContact})`;
+ 
+       if (state.status === 'SCHEDULED') {
+         pill.className = 'status-pill warn';
+@@ -850,14 +1041,14 @@
+         continuationNotice.style.display = 'none';
+       }
+ 
+-      // Rendu 100% sécurisé de la liste des candidats récents (sans innerHTML)
++      // Rendu 100% sécurisé de la liste des candidats récents (sans innerHTML sur les données)
+       if (state.recentCandidates && state.recentCandidates.length > 0) {
+         const liveList = document.getElementById('liveCandidatesList');
+         liveList.innerHTML = '';
+         state.recentCandidates.slice(-5).reverse().forEach(c => {
+           const item = document.createElement('div');
+           item.className = 'live-item';
+-          
++
+           const infoDiv = document.createElement('div');
+           const nameStrong = document.createElement('strong');
+           nameStrong.textContent = c.name || 'Inconnu';
+@@ -865,18 +1056,14 @@
+           scoreSpan.style.color = 'var(--text-muted)';
+           scoreSpan.style.fontSize = '9.5px';
+           scoreSpan.style.marginLeft = '4px';
+-          scoreSpan.textContent = `(${c.score}/5)`;
++          scoreSpan.textContent = `(${formatScore(c.score)})`;
+ 
+           infoDiv.appendChild(nameStrong);
+           infoDiv.appendChild(scoreSpan);
+ 
+           const badgeSpan = document.createElement('span');
+           badgeSpan.textContent = c.reco || 'À garder en vivier';
+-          let badgeClass = 'pool';
+-          if (c.reco === 'À contacter') badgeClass = 'contact';
+-          else if (c.reco === 'À refuser') badgeClass = 'reject';
+-          else if (c.reco === 'Erreur') badgeClass = 'error';
+-          badgeSpan.className = `badge ${badgeClass}`;
++          badgeSpan.className = badgeClass(c.reco);
+ 
+           item.appendChild(infoDiv);
+           item.appendChild(badgeSpan);

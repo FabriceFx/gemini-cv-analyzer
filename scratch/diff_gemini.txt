@@ -1,0 +1,492 @@
+diff --git a/GeminiClient.gs b/GeminiClient.gs
+index 745f2b1..0295829 100644
+--- a/GeminiClient.gs
++++ b/GeminiClient.gs
+@@ -1,89 +1,30 @@
+ /**
+  * GeminiClient.gs
+- * Client pour l'API Gemini : gestion des appels, schémas JSON et extraction.
++ * Client pour l'API Gemini : appels, schémas JSON et lecture des réponses.
++ *
++ * Le cache de contexte explicite des versions antérieures a été retiré en
++ * v1.0 : il ne se déclenchait qu'au-delà de 130 000 caractères de prompt,
++ * seuil qu'une annonce et sa grille n'atteignent jamais. Le préfixe commun
++ * (prompt, annonce, grille) reste en tête de chaque requête, ce qui laisse
++ * jouer la mise en cache implicite des modèles qui la proposent.
+  */
+ 
+-/**
+- * Tente de créer un Context Cache pour la session courante si le texte est très long.
+- * (Gemini nécessite généralement >32k tokens pour activer le cache).
+- * @returns {string|null} Le nom du cache créé, ou null si non applicable.
+- */
+-function createGeminiCache(apiKey, model, systemPrompt, jobDescription, criteria) {
+-  const finalSystemPrompt = systemPrompt
+-    .replace("{{JOB_DESCRIPTION}}", jobDescription)
+-    .replace("{{CRITERIA}}", criteria || "Aucun critère particulier spécifié.");
+-
+-  const fullText = finalSystemPrompt + jobDescription + criteria;
+-  // Le caching Gemini nécessite un volume minimal de ~32k tokens (~130 000 caractères)
+-  if (fullText.length < 130000) {
+-    return null; // Trop court pour le caching
+-  }
+-
+-  const payload = {
+-    model: `models/${model}`,
+-    contents: [{
+-      role: "user",
+-      parts: [
+-        { text: "Contexte de l'offre d'emploi :\n" + jobDescription },
+-        { text: "Critères :\n" + (criteria || "Aucun critère particulier spécifié.") }
+-      ]
+-    }],
+-    systemInstruction: {
+-      parts: [{ text: finalSystemPrompt }]
+-    },
+-    ttl: "1800s" // 30 minutes
+-  };
+-
+-  const url = "https://generativelanguage.googleapis.com/v1beta/cachedContents";
+-  const options = {
+-    method: "post",
+-    contentType: "application/json",
+-    headers: { "x-goog-api-key": apiKey },
+-    payload: JSON.stringify(payload),
+-    muteHttpExceptions: true
+-  };
+-
+-  try {
+-    const response = UrlFetchApp.fetch(url, options);
+-    if (response.getResponseCode() === 200) {
+-      const json = JSON.parse(response.getContentText());
+-      return json.name;
+-    }
+-  } catch (e) {
+-    Logger.log("Info: Le cache n'a pas pu être créé. " + e.message);
+-  }
+-  return null;
+-}
+-
+ /**
+  * Nettoie et structure le texte brut récupéré d'une annonce web à l'aide de l'IA Gemini.
+  */
+ function extractJobDescriptionWithGemini(rawText, apiKey, model) {
+   const truncatedText = rawText.substring(0, 45000);
+ 
+-  const systemInstruction = "Vous êtes un assistant spécialisé dans le recrutement de talents. Votre but est d'extraire la fiche descriptive d'un poste de manière claire et organisée en français à partir de texte brut.";
+-  const userPrompt = `Voici le texte extrait de la page web de l'annonce. Extrayez uniquement :\n- Le titre du poste et l'entreprise\n- Les missions principales\n- Les compétences exigées et profil recherché (XP, techno, diplôme)\n- Autres modalités (télétravail, salaire, localisation)\n\nNe conservez rien d'autre (ignorez les menus du site, les liens externes, etc.).\n\nTexte brut :\n${truncatedText}`;
++  const systemInstruction = "Vous êtes un assistant spécialisé dans le recrutement. Votre but est d'extraire la fiche descriptive d'un poste, de manière claire et organisée, en français, à partir de texte brut.";
++  const userPrompt = `Voici le texte extrait de la page web de l'annonce. Extrayez uniquement, en 5 000 caractères au plus :\n- le titre du poste et l'entreprise ;\n- les missions principales ;\n- les compétences exigées et le profil recherché (expérience, technologies, diplôme), en distinguant ce qui est exigé de ce qui est souhaité ;\n- les autres modalités (télétravail, salaire, localisation).\n\nNe conservez rien d'autre (menus du site, liens externes, etc.).\n\nTexte brut :\n${truncatedText}`;
+ 
+   const payload = {
+-    contents: [{
+-      role: "user",
+-      parts: [{ text: userPrompt }]
+-    }],
+-    systemInstruction: {
+-      parts: [{ text: systemInstruction }]
+-    },
+-    generationConfig: {
+-      temperature: 0.1
+-    }
++    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
++    systemInstruction: { parts: [{ text: systemInstruction }] },
++    generationConfig: { temperature: 0.1 },
+   };
+ 
+-  const responseText = callGeminiAPI(model, payload, apiKey);
+-  const json = JSON.parse(responseText);
+-
+-  if (json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts[0]) {
+-    return json.candidates[0].content.parts[0].text;
+-  }
+-  throw new Error("L'API a retourné un format vide lors du nettoyage de l'offre d'emploi.");
++  return _extractGeminiText(callGeminiAPI(model, payload, apiKey));
+ }
+ 
+ /**
+@@ -96,7 +37,7 @@ function _convertDocxToPdfBlob(file) {
+     const copy = Drive.Files.copy(
+       { title: `tmp_${file.getName()}` },
+       file.getId(),
+-      { convert: true }
++      { convert: true },
+     );
+     try {
+       const tempDoc = DriveApp.getFileById(copy.id);
+@@ -109,7 +50,7 @@ function _convertDocxToPdfBlob(file) {
+       }
+     }
+   }
+-  throw new Error(`Le service Drive avancé n'est pas disponible pour convertir "${file.getName()}". Veuillez l'enregistrer en PDF.`);
++  throw new Error(`Le service Drive avancé n'est pas disponible pour convertir "${file.getName()}". Enregistrez-le en PDF.`);
+ }
+ 
+ /**
+@@ -119,20 +60,24 @@ function _convertDocxToPdfBlob(file) {
+ function _prepareDocumentEntry(file) {
+   const fileSizeBytes = file.getSize();
+   if (fileSizeBytes > MAX_FILE_SIZE) {
+-    throw new Error(`Le fichier "${file.getName()}" est trop volumineux (${Math.round(fileSizeBytes / 1024 / 1024)} MB). Maximum : 20 MB.`);
++    throw new Error(`Le fichier "${file.getName()}" est trop volumineux (${Math.round(fileSizeBytes / 1024 / 1024)} Mo). Maximum : 20 Mo.`);
+   }
+-  if (fileSizeBytes === 0) {
++  if (fileSizeBytes === 0 && file.getMimeType() !== MimeType.GOOGLE_DOCS) {
++    // Précaution : un fichier natif Google a longtemps déclaré 0 octet (hors
++    // quota). La documentation actuelle ne le dit plus, mais rien ne garantit
++    // qu'un Google Doc non vide ne rende pas 0 ; il est donc exporté quand même.
+     throw new Error(`Le fichier "${file.getName()}" est vide (0 octet).`);
+   }
+ 
+-  let blob, mimeType;
++  let blob;
++  let mimeType;
+   try {
+     mimeType = file.getMimeType();
+-    
++
+     if (mimeType === MimeType.GOOGLE_DOCS) {
+       blob = file.getBlob().getAs(MimeType.PDF);
+       mimeType = MimeType.PDF;
+-    } else if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
++    } else if (mimeType === MIME_DOCX) {
+       blob = _convertDocxToPdfBlob(file);
+       mimeType = MimeType.PDF;
+     } else {
+@@ -145,83 +90,132 @@ function _prepareDocumentEntry(file) {
+   return { file, mimeType, base64Data: Utilities.base64Encode(blob.getBytes()) };
+ }
+ 
+-const DOCUMENT_RESPONSE_SCHEMA = {
+-  type: "OBJECT",
+-  properties: {
+-    candidateName: { type: "STRING", description: "Nom et Prénom du candidat. Écrire 'Inconnu' si introuvable." },
+-    email: { type: "STRING", description: "Adresse email du candidat. Écrire 'Non renseigné' si introuvable." },
+-    phone: { type: "STRING", description: "Numéro de téléphone du candidat. Écrire 'Non renseigné' si introuvable." },
+-    experience: { type: "STRING", description: "Résumé des expériences pertinentes en une phrase synthétique." },
+-    education: { type: "STRING", description: "Résumé des diplômes en une phrase." },
+-    skills: { type: "STRING", description: "Les 3 compétences clés pour le poste avec 'Oui', 'Non', ou 'Partiel'." },
+-    strengths: { type: "STRING", description: "Points forts pour le poste en texte fluide." },
+-    weaknesses: { type: "STRING", description: "Points faibles ou questions à creuser en texte fluide." },
+-    recommendation: { 
+-      type: "STRING", 
+-      enum: ["À contacter", "À garder en vivier", "À refuser"],
+-      description: "Strictement l'une de ces 3 valeurs : 'À contacter' (uniquement si le profil correspond très bien au poste avec note >= 4/5 et mérite un entretien), 'À garder en vivier' (profil intéressant mais compétences partielles ou note <= 3), 'À refuser' (profil non adapté ou note <= 2)." 
+-    },
+-    score: { type: "INTEGER", description: "Note sur 5 basée sur l'adéquation au poste (5: Excellent, 4: Très bon / À contacter, 3: Moyen / Vivier, 2: Faible, 1: Inadéquat)." }
+-  },
+-  required: ["candidateName", "email", "phone", "experience", "education", "skills", "strengths", "weaknesses", "recommendation", "score"]
+-};
+-
+-/** Construit le payload Gemini pour un document préparé, en tenant compte du cache éventuel. */
+-function _buildDocumentPayload(entry, jobDescription, criteria, systemPrompt, cacheName) {
+-  const payload = {
++/**
++ * Contexte commun à tous les CV d'une exécution : prompt final, grille,
++ * schéma. Construit une fois, pas une fois par CV.
++ * @returns {{apiKey: string, model: string, promptFinal: string, criteres: Object[], schema: Object, dateDuJour: string}}
++ */
++const contexteEvaluation_ = ({ apiKey, model, prompt, annonce, criteres, consignes }) => ({
++  apiKey,
++  model,
++  criteres,
++  // split/join plutôt que replace : une annonce qui contient « $& » ou « $' »
++  // serait sinon réécrite par les motifs spéciaux de String.replace.
++  promptFinal: prompt
++    .split('{{JOB_DESCRIPTION}}').join(annonce)
++    .split('{{CRITERIA}}').join(rendreGrillePourPrompt_(criteres, consignes)),
++  schema: schemaEvaluation_(criteres),
++  dateDuJour: dateLisible_(new Date()),
++});
++
++/** Requête d'évaluation d'un CV : le préfixe commun d'abord, le document ensuite. */
++function _buildDocumentPayload(entry, contexte) {
++  return {
+     contents: [{
+-      role: "user",
+-      parts: [{ inlineData: { mimeType: entry.mimeType, data: entry.base64Data } }]
++      role: 'user',
++      parts: [
++        { text: contexte.promptFinal },
++        { text: `Date du jour : ${contexte.dateDuJour}. Voici le CV à évaluer.` },
++        { inlineData: { mimeType: entry.mimeType, data: entry.base64Data } },
++      ],
+     }],
+     generationConfig: {
+-      responseMimeType: "application/json",
+-      responseSchema: DOCUMENT_RESPONSE_SCHEMA,
+-      temperature: 0.1
+-    }
++      responseMimeType: 'application/json',
++      responseSchema: contexte.schema,
++      temperature: 0.1,
++    },
+   };
+-
+-  if (cacheName) {
+-    payload.cachedContent = cacheName;
+-  } else {
+-    const finalPrompt = systemPrompt
+-      .replace("{{JOB_DESCRIPTION}}", jobDescription)
+-      .replace("{{CRITERIA}}", criteria || "Aucun critère particulier spécifié.");
+-    payload.contents[0].parts.unshift({ text: finalPrompt });
+-  }
+-  return payload;
+ }
+ 
++/**
++ * Texte de la réponse, ou une erreur qui dit pourquoi il n'y en a pas.
++ *
++ * Avant la v1.0, une réponse bloquée ou tronquée donnait « résultat non
++ * valide » sans motif ; le motif rendu par Gemini (SAFETY, MAX_TOKENS…) dit
++ * pourtant quoi faire.
++ */
+ function _extractGeminiText(responseText) {
+   const json = JSON.parse(responseText);
+-  if (json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts[0]) {
+-    return json.candidates[0].content.parts[0].text;
++  const candidat = json.candidates && json.candidates[0];
++  const parts = candidat && candidat.content && Array.isArray(candidat.content.parts) ? candidat.content.parts : [];
++  const texte = parts.filter((p) => typeof p.text === 'string' && !p.thought).map((p) => p.text).join('');
++  if (texte) {
++    if (candidat.finishReason === 'MAX_TOKENS') {
++      throw new Error('Réponse de Gemini tronquée (limite de longueur atteinte) : allégez la grille ou vérifiez le CV.');
++    }
++    return texte;
++  }
++  if (json.promptFeedback && json.promptFeedback.blockReason) {
++    throw new Error(`Requête bloquée par Gemini (motif : ${json.promptFeedback.blockReason}).`);
++  }
++  if (candidat && candidat.finishReason) {
++    throw new Error(`Gemini n'a rendu aucun texte (motif : ${candidat.finishReason}).`);
+   }
+   throw new Error("L'API Gemini n'a pas renvoyé de résultat valide.");
+ }
+ 
++/**
++ * Lit une évaluation rendue par Gemini et la rattache aux critères de la grille.
++ *
++ * Un critère sans statut valide rend la réponse inutilisable : l'erreur est
++ * levée, la ligne passe « Erreur » et sera retentée. Compter ce critère comme
++ * « Non démontré » aurait fait d'une réponse incomplète un mauvais candidat.
++ */
++const lireAnalyse_ = (texteReponse, criteres) => {
++  const brute = parseJsonSafely(texteReponse);
++  const bloc = brute && typeof brute.criteres === 'object' && brute.criteres !== null ? brute.criteres : {};
++  const statuts = Object.values(STATUTS_CRITERE);
++  const evaluations = {};
++  const manquants = [];
++  criteres.forEach((c) => {
++    const ev = bloc[c.code];
++    if (!ev || !statuts.includes(ev.statut)) {
++      manquants.push(c.code);
++      return;
++    }
++    evaluations[c.cle] = {
++      statut: ev.statut,
++      preuve: ev.statut === STATUTS_CRITERE.NON_DEMONTRE ? '' : tronquer_(ev.preuve, 300),
++      empreinte: c.empreinte,
++    };
++  });
++  if (manquants.length > 0) {
++    throw new Error(`Réponse incomplète de Gemini : ${manquants.join(', ')} sans statut valide.`);
++  }
++  const texte = (v) => normaliserEspaces_(v);
++  return {
++    candidateName: texte(brute.candidateName),
++    email: texte(brute.email),
++    phone: texte(brute.phone),
++    experience: texte(brute.experience),
++    education: texte(brute.education),
++    strengths: texte(brute.strengths),
++    weaknesses: texte(brute.weaknesses),
++    evaluations,
++  };
++};
++
+ /** Analyse un seul document. */
+-function analyzeSingleDocument(file, apiKey, model, jobDescription, criteria, systemPrompt, cacheName) {
++function analyzeSingleDocument(file, contexte) {
+   const entry = _prepareDocumentEntry(file);
+-  const payload = _buildDocumentPayload(entry, jobDescription, criteria, systemPrompt, cacheName);
+-  const responseText = callGeminiAPI(model, payload, apiKey);
+-  return parseJsonSafely(_extractGeminiText(responseText));
++  const responseText = callGeminiAPI(contexte.model, _buildDocumentPayload(entry, contexte), contexte.apiKey);
++  return lireAnalyse_(_extractGeminiText(responseText), contexte.criteres);
+ }
+ 
+ /**
+  * Analyse un lot de documents en parallèle via fetchAll.
+  * Les échecs 429 individuels sont retentés en solo avec backoff exponentiel.
+- * @returns {Array<{file, analysis, error}>}
++ * @returns {Array<{file, analysis?, error?}>}
+  */
+-function analyzeDocumentsBatch(files, apiKey, model, jobDescription, criteria, systemPrompt, cacheName) {
+-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
++function analyzeDocumentsBatch(files, contexte) {
++  const url = `https://generativelanguage.googleapis.com/v1beta/models/${contexte.model}:generateContent`;
+ 
+   const entries = [];
+   const prepErrors = [];
+-  
++
+   for (const file of files) {
+     try {
+-      const entry = _prepareDocumentEntry(file);
+-      entries.push(entry);
++      entries.push(_prepareDocumentEntry(file));
+     } catch (e) {
+       prepErrors.push({ file, error: e.message });
+     }
+@@ -231,7 +225,7 @@ function analyzeDocumentsBatch(files, apiKey, model, jobDescription, criteria, s
+     return prepErrors;
+   }
+ 
+-  // Diviser en sous-lots de 3 à 5 requêtes parallèles max pour respecter les quotas
++  // Sous-lots de 5 requêtes parallèles au plus, pour respecter les quotas.
+   const SUB_BATCH_SIZE = Math.min(5, entries.length);
+   const subBatches = [];
+   for (let i = 0; i < entries.length; i += SUB_BATCH_SIZE) {
+@@ -239,18 +233,17 @@ function analyzeDocumentsBatch(files, apiKey, model, jobDescription, criteria, s
+   }
+ 
+   const results = [...prepErrors];
+-  for (let batchIdx = 0; batchIdx < subBatches.length; batchIdx++) {
+-    const subBatch = subBatches[batchIdx];
+-    const requests = subBatch.map(entry => ({
++  subBatches.forEach((subBatch, batchIdx) => {
++    const requests = subBatch.map((entry) => ({
+       url,
+-      method: "post",
+-      contentType: "application/json",
+-      headers: { "x-goog-api-key": apiKey },
+-      payload: JSON.stringify(_buildDocumentPayload(entry, jobDescription, criteria, systemPrompt, cacheName)),
+-      muteHttpExceptions: true
++      method: 'post',
++      contentType: 'application/json',
++      headers: { 'x-goog-api-key': contexte.apiKey },
++      payload: JSON.stringify(_buildDocumentPayload(entry, contexte)),
++      muteHttpExceptions: true,
+     }));
+ 
+-    const responses = requests.length ? UrlFetchApp.fetchAll(requests) : [];
++    const responses = UrlFetchApp.fetchAll(requests);
+ 
+     responses.forEach((response, i) => {
+       const entry = subBatch[i];
+@@ -258,15 +251,15 @@ function analyzeDocumentsBatch(files, apiKey, model, jobDescription, criteria, s
+ 
+       if (code === 200) {
+         try {
+-          results.push({ file: entry.file, analysis: parseJsonSafely(_extractGeminiText(response.getContentText())) });
++          results.push({ file: entry.file, analysis: lireAnalyse_(_extractGeminiText(response.getContentText()), contexte.criteres) });
+         } catch (e) {
+-          results.push({ file: entry.file, error: `Réponse illisible : ${e.message}` });
++          results.push({ file: entry.file, error: e.message });
+         }
+       } else if (code === 429) {
+         // Throttle isolé sur ce document précis : retry solo avec backoff
+         try {
+-          const retryText = callGeminiAPI(model, _buildDocumentPayload(entry, jobDescription, criteria, systemPrompt, cacheName), apiKey);
+-          results.push({ file: entry.file, analysis: parseJsonSafely(_extractGeminiText(retryText)) });
++          const retryText = callGeminiAPI(contexte.model, _buildDocumentPayload(entry, contexte), contexte.apiKey);
++          results.push({ file: entry.file, analysis: lireAnalyse_(_extractGeminiText(retryText), contexte.criteres) });
+         } catch (retryErr) {
+           results.push({ file: entry.file, error: retryErr.message });
+         }
+@@ -283,52 +276,25 @@ function analyzeDocumentsBatch(files, apiKey, model, jobDescription, criteria, s
+     if (batchIdx < subBatches.length - 1) {
+       Utilities.sleep(1000);
+     }
+-  }
++  });
+ 
+   return results;
+ }
+ 
+-/** Supprime explicitement un Context Cache Gemini plutôt que d'attendre son expiration par TTL. */
+-function deleteGeminiCache(cacheName, apiKey) {
+-  if (!cacheName) return;
+-  try {
+-    const url = `https://generativelanguage.googleapis.com/v1beta/${cacheName}`;
+-    UrlFetchApp.fetch(url, { 
+-      method: "delete", 
+-      headers: { "x-goog-api-key": apiKey },
+-      muteHttpExceptions: true 
+-    });
+-  } catch (e) {
+-    Logger.log("Info : échec de la suppression explicite du cache. " + e.message);
+-  }
+-}
+-
+ /**
+  * Génère une phrase de synthèse globale et un conseil pour la session de recrutement.
+  */
+ function generateSessionSynthesis(candidatesSummary, jobDescription, apiKey, model) {
+-  const systemInstruction = "Vous êtes un Recruteur Senior conseil. Votre rôle est de donner un conseil final en une seule phrase après l'analyse de plusieurs CVs.";
+-  const prompt = `Voici la description du poste :\n${jobDescription}\n\nVoici le résumé des candidats évalués :\n${candidatesSummary}\n\nRédigez une unique phrase de synthèse de conseil et d'orientation actionnable. Soyez direct, professionnel et concis. Ne dépassez pas 35 mots.`;
++  const systemInstruction = 'Vous êtes un recruteur senior. Votre rôle est de donner un conseil final en une seule phrase après l\'analyse de plusieurs CV.';
++  const prompt = `Voici la description du poste :\n${jobDescription}\n\nVoici le résumé des candidats évalués (score sur 100 calculé à partir de la grille de l'équipe RH) :\n${candidatesSummary}\n\nRédigez une unique phrase de synthèse, de conseil et d'orientation actionnable. Soyez direct, professionnel et concis. Ne dépassez pas 35 mots.`;
+ 
+   const payload = {
+-    contents: [{
+-      role: "user",
+-      parts: [{ text: prompt }]
+-    }],
+-    systemInstruction: {
+-      parts: [{ text: systemInstruction }]
+-    },
+-    generationConfig: {
+-      temperature: 0.2
+-    }
++    contents: [{ role: 'user', parts: [{ text: prompt }] }],
++    systemInstruction: { parts: [{ text: systemInstruction }] },
++    generationConfig: { temperature: 0.2 },
+   };
+ 
+-  const responseText = callGeminiAPI(model, payload, apiKey);
+-  const json = JSON.parse(responseText);
+-  if (json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts[0]) {
+-    return json.candidates[0].content.parts[0].text.trim();
+-  }
+-  throw new Error("Réponse vide de l'API pour la synthèse de session.");
++  return _extractGeminiText(callGeminiAPI(model, payload, apiKey)).trim();
+ }
+ 
+ /**
+@@ -338,17 +304,17 @@ function generateSessionSynthesis(candidatesSummary, jobDescription, apiKey, mod
+ function callGeminiAPI(model, payload, apiKey) {
+   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+ 
+-  const maskedApiKey = apiKey ? `${apiKey.substring(0, 6)}...` : "non définie";
++  const maskedApiKey = apiKey ? `${apiKey.substring(0, 6)}...` : 'non définie';
+   Logger.log(`Appel API Gemini avec modèle: ${model}, clé: ${maskedApiKey}`);
+ 
+   const options = {
+-    method: "post",
+-    contentType: "application/json",
++    method: 'post',
++    contentType: 'application/json',
+     headers: {
+-      "x-goog-api-key": apiKey
++      'x-goog-api-key': apiKey,
+     },
+     payload: JSON.stringify(payload),
+-    muteHttpExceptions: true
++    muteHttpExceptions: true,
+   };
+ 
+   const maxRetries = 5;
+@@ -384,10 +350,10 @@ function callGeminiAPI(model, payload, apiKey) {
+       throw new Error(`Requête invalide (HTTP 400). Le document est peut-être trop complexe ou non supporté. Détail : ${errorMsg}`);
+     }
+     if (code === 401) {
+-      throw new Error("Clé API Gemini invalide ou expirée (HTTP 401).");
++      throw new Error('Clé API Gemini invalide ou expirée (HTTP 401).');
+     }
+     if (code === 403) {
+-      throw new Error("Accès refusé par l'API Gemini (HTTP 403). Vérifiez votre clé.");
++      throw new Error('Accès refusé par l\'API Gemini (HTTP 403). Vérifiez votre clé.');
+     }
+ 
+     lastError = errorMsg;

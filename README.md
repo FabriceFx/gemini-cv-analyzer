@@ -1,98 +1,190 @@
 # 🔍 gemini-cv-analyzer
 
-[🇫🇷 Français](#-français) | [🇬🇧 English](#-english)
+[Français](#français) · [English](#english)
+
+<a name="français"></a>
+## Français
+
+Assistant de recrutement dans Google Sheets. Il lit les CV (PDF, Google Docs,
+DOCX) déposés dans un dossier Drive, les évalue avec Gemini au regard de
+l'annonce et d'une **grille de critères fixée par l'équipe RH**, calcule un
+score sur 100, propose « À contacter », « À garder en vivier » ou « À refuser »
+avec son motif, écarte les doublons et prépare les brouillons de réponse dans
+Gmail.
+
+Pour l'installer et s'en servir, voir **[DEMARRAGE.md](DEMARRAGE.md)**.
+
+### Comment un CV est évalué
+
+| Étape | Qui | Quoi |
+|---|---|---|
+| 1. Grille | l'équipe RH | critères vérifiables sur un CV, avec niveau et poids ; l'outil peut la proposer à partir de l'annonce |
+| 2. Constat | Gemini | pour chaque critère : Satisfait, Partiel ou Non démontré, et l'extrait du CV qui le justifie |
+| 3. Score | le code | 100 × Σ(poids × valeur) ÷ Σ(poids), avec Satisfait = 1, Partiel = 0,5, Non démontré = 0 |
+| 4. Classement | le code | seuils, indispensables, doublons, places ; puis tri de l'onglet |
+| 5. Décision | l'équipe RH | colonne « Décision RH », jamais écrite par l'outil |
+
+### Ce qui décide la recommandation
+
+| Recommandation | Condition |
+|---|---|
+| À refuser | un critère indispensable non démontré, ou score sous le seuil de vivier (40) |
+| À garder en vivier | un indispensable démontré en partie seulement, ou score sous le seuil de contact (70), ou rang au-delà des places |
+| À contacter | score au moins égal au seuil de contact, indispensables démontrés, dans la limite des places (10) |
+| Doublon | autre CV de la même personne ; seule la fiche la mieux notée est classée |
+| À réanalyser | évalué avec une autre annonce, d'autres consignes, un autre prompt, un autre modèle, ou avant l'ajout d'un critère |
+
+Les seuils et le nombre de places se règlent dans le panneau. Les places sont
+un **maximum** : l'outil ne complète jamais.
+
+### Doublons
+
+| Situation | Effet |
+|---|---|
+| Même email, ou même téléphone (« 06… », « +33 6… » se valent) | seule la fiche la mieux notée est classée ; les autres passent « Doublon » |
+| Même email ou téléphone, mais noms différents | « À vérifier » (cabinet de recrutement, adresse partagée) ; rien n'est écarté |
+| Même nom, aucune coordonnée commune | « À vérifier » ; rien n'est écarté |
+| « Non renseigné » | ne relie personne |
+
+### Ce qui coûte une réanalyse
+
+| Changement | Effet |
+|---|---|
+| Niveau, poids, seuils, places ; critère retiré | recalcul immédiat (« Recalculer le classement »), sans appel à Gemini |
+| Critère ajouté ou reformulé, précisions modifiées | les CV passent « À réanalyser », puis le sont au lancement suivant |
+| Annonce, consignes, prompt ou modèle modifiés | idem |
+
+### Choix de conception
+
+| Choix | Pourquoi |
+|---|---|
+| L'IA constate, le code note. | Deux CV jugés sur les mêmes critères se comparent ; une note globale de 1 à 5 ne départageait rien. |
+| Chaque statut porte un extrait du CV. | Un score qui ne sait pas dire d'où il vient ne survit pas à la première contestation. |
+| Le niveau et le poids ne sont pas montrés à l'IA. | Elle constate sans indulgence, et l'on peut les changer sans réanalyser. |
+| Seuils absolus, places en maximum. | « Top 10 » voulait dire « toujours 10 » ; l'équipe RH n'en voulait que les bons. |
+| Un fait et une présomption dans deux cases. | Même email : doublon. Même nom : « À vérifier ». Un homonyme n'est pas écarté. |
+| « Décision RH » n'est jamais écrite par le code. | La proposition de l'outil se recalcule ; la décision humaine, non. |
+| Colonnes retrouvées par leur en-tête. | Une colonne ajoutée par l'équipe ne décale aucune écriture. |
+| Réanalyse sur la ligne existante. | La décision RH, la date de brouillon et les colonnes de l'équipe restent attachées au candidat. |
+| Un brouillon daté aussitôt créé, un seul par adresse. | Une génération interrompue se relance sans doublon ; une même personne ne reçoit pas invitation et refus. |
+| Annonce par URL lue une seule fois. | Tous les CV d'une campagne sont comparés à la même annonce. |
+| Texte venu d'un CV forcé en texte. | Un « nom » `=IMAGE(…)` ferait sortir le contenu du classeur. |
+| Projet lié au classeur. | Chaque action manuelle s'exécute sous l'identité de qui clique. |
+
+### Portées demandées
+
+| Portée | Pour quoi faire |
+|---|---|
+| `spreadsheets.currentonly` | ce classeur-ci, et aucun autre |
+| `drive` | lire les CV du dossier, convertir les DOCX (copie temporaire), mettre les CV expirés à la corbeille |
+| `script.external_request` | appeler Gemini, lire une annonce par URL (domaines autorisés seulement) |
+| `script.container.ui` | menu, panneau, boîtes de dialogue |
+| `script.scriptapp` | reprise automatique, analyse quotidienne |
+| `gmail.compose` | créer des **brouillons** ; aucun email n'est envoyé aux candidats |
+| `script.send_mail` | vous prévenir de la fin ou de l'échec d'une analyse automatique |
+
+### Confidentialité
+
+En palier gratuit, Google peut réutiliser les requêtes. Pour des CV, utilisez
+une clé d'un **projet facturé**. La synthèse de session ne transmet que des
+scores, sans nom. Le nettoyage RGPD met à la corbeille les CV plus anciens que
+le délai de rétention et pseudonymise leurs lignes, extraits compris.
+
+### Structure
+
+```
+Constants.gs          version, en-têtes, libellés, prompt par défaut
+Config.gs             réglages (DocumentProperties), prompt effectif, annonce de référence
+Grille.gs             onglet de la grille, proposition par Gemini, schéma, empreintes
+Classement.gs         score, recommandation, doublons, places, tri
+Resultats.gs          lecture et écriture de l'onglet Résultats par en-tête
+GeminiClient.gs       appels Gemini, lecture et contrôle des réponses
+Main.gs               analyse en lots, reprise automatique, CV unique
+EmailService.gs       brouillons Gmail
+SidebarController.gs  pont avec le panneau
+Sidebar.html          panneau latéral
+UI.gs                 menu, initialisation, guide, « À propos »
+RGPD.gs               nettoyage et pseudonymisation
+DriveService.gs       identifiant d'un dossier
+Utils.gs              analyse JSON, normalisations, empreinte SHA-256
+banc/                 banc d'essai hors Google (non poussé par clasp)
+```
+
+### Banc d'essai
+
+```bash
+node banc/test.js
+```
+
+Les `.gs` sont chargés dans un contexte Node où Sheets, Drive et Gemini sont
+simulés, aussi stricts que les vrais : formules, nombres et dates interprétés
+comme Sheets, 9 Ko par propriété, octets signés, schéma Gemini vérifié,
+horloge simulée pour les reprises. Le banc exécute aussi le script du panneau
+contre les vraies fonctions serveur.
+
+Réintroduire un défaut doit faire échouer le banc :
+
+| Défaut à réintroduire | Cas qui doit échouer |
+|---|---|
+| Compléter les places avec le vivier | Les places sont un maximum |
+| Écrire tel quel un texte venu d'un CV | Formules : toute chaîne venue d'un CV est neutralisée |
+| Empreinte du référentiel sans préfixe `r1-` | Empreinte du référentiel : jamais numérique |
+| Ignorer les prompts historiques | Le prompt par défaut figé est reconnu |
+| Accepter « Non renseigné » comme email | Clés d'identité / « Non renseigné » ne relie personne |
+| Ne pas dater le brouillon | Brouillons : jamais refaits |
+| Plusieurs brouillons par adresse | Brouillons : un par adresse |
+| Constante globale lisant un autre fichier | Chargement quel que soit l'ordre des fichiers |
+| Échec de réanalyse qui réécrit toute la ligne | Réanalyse en échec : la ligne garde le nom |
+| Fiche retenue = la moins bien notée | Un doublon ne prend pas de place |
+| Adresse de cabinet prise pour une personne | Une adresse partagée n'écarte personne |
+| Onglet non trié | Analyse complète : … et tri |
+| Noms envoyés dans la synthèse | Analyse complète : aucun nom dans la synthèse |
+| Ligne active lue sur un autre onglet | Panneau : candidats désignés par leur fichier |
+| Langue illisible non absorbée dans `onOpen` | Menu construit même quand la langue est illisible |
+| Réponse incomplète comptée « non démontré » | Analyse complète : erreurs |
+| Ex æquo tranché sans le dire | Places : ex æquo départagé et dit |
+| Critère retiré qui oblige à réanalyser | Critère retiré = rien à refaire |
+| Seuil de contact exclusif | Recommandation par seuils absolus |
+| `muteHttpExceptions` retiré de la lecture d'annonce | Une annonce en 403 donne le message prévu |
+
+Avant de pousser :
+
+```bash
+cat *.gs > /tmp/projet.js && node --check /tmp/projet.js && node banc/test.js
+```
+
+### Licence
+
+[Elastic License 2.0](LICENSE) — Fabrice Faucheux ([faucheux.bzh](https://faucheux.bzh)).
 
 ---
 
-## 🇫🇷 Français
+<a name="english"></a>
+## English
 
-**Un assistant de recrutement intelligent sur Google Sheets utilisant l'API Gemini.**
+A recruitment assistant in Google Sheets. It reads CVs (PDF, Google Docs,
+DOCX) from a Drive folder, evaluates them with Gemini against the job ad and an
+**evaluation grid set by the HR team**, computes a score out of 100, proposes
+« contact », « talent pool » or « reject » with its reason, sets duplicates
+aside and prepares reply drafts in Gmail.
 
-Cet outil utilise l'API Gemini pour analyser automatiquement des CVs (PDF, Google Docs et DOCX) déposés dans un dossier Google Drive, en les comparant à une offre d'emploi. Il évalue l'adéquation des profils, extrait les coordonnées, sélectionne les meilleurs profils en prise de contact (Top 10 max qualifiés avec note ≥ 4/5) et rédige automatiquement les brouillons d'emails de réponse. L'architecture est modularisée en 12 fichiers (11 scripts `.gs` et 1 fichier `.html`) pour une excellente maintenabilité.
+- **Gemini states, the code scores.** For each criterion of the grid, Gemini
+  returns Satisfied, Partial or Not shown, with a quote from the CV; the score
+  is a weighted average computed in code, and every row shows its calculation.
+- **Absolute thresholds, seats as a maximum.** A missing must-have criterion
+  rejects the CV; only candidates above the contact threshold are proposed,
+  and never more than the number of seats — never padded up to it.
+- **One row per person.** Same email or same phone: one CV is ranked, the
+  others are marked « Doublon ». Same name only, or a contact shared by
+  different names (a recruitment agency): flagged for review, nothing removed.
+- **The HR decision column is never written by the code** and drives the
+  email drafts. One draft per address, never twice.
+- **Changing weights, levels or thresholds costs nothing**: « Recalculer le
+  classement » re-ranks without calling Gemini. Adding or rewording a
+  criterion marks CVs for re-analysis on the next run.
 
-### 🚀 Guide d'installation et configuration
+Setup instructions are in **[DEMARRAGE.md](DEMARRAGE.md)** (French). The
+interface inside the spreadsheet is in French; the menu follows the account
+language.
 
-#### Étape 1 : créer ou ouvrir une Google Sheet
-1. Ouvrez [Google Sheets](https://sheets.google.com) et créez une nouvelle feuille de calcul vierge (ou ouvrez-en une existante).
-
-#### Étape 2 : accéder à l'éditeur Apps Script
-1. Dans le menu supérieur, cliquez sur **Extensions** > **Apps Script**.
-2. Cela ouvre l'interface de développement de Google Apps Script liée à votre feuille de calcul.
-
-#### Étape 3 : copier les fichiers `.gs` et `.html`
-Le code source est organisé en 12 fichiers :
-- **Fichiers Script (`.gs`)** : `Config.gs`, `Constants.gs`, `DriveService.gs`, `EmailService.gs`, `GeminiClient.gs`, `Main.gs`, `RGPD.gs`, `SidebarController.gs`, `Test.gs`, `UI.gs`, `Utils.gs`.
-- **Fichier HTML (`.html`)** : `Sidebar.html` *(créé via **+** > **HTML** dans l'éditeur)*.
-
-1. Dans l'éditeur Apps Script, créez un nouveau script pour chacun des fichiers `.gs` (icône **+** > **Script**).
-2. Créez un fichier HTML nommé `Sidebar` (icône **+** > **HTML**).
-3. Copiez-collez le code de chaque fichier correspondant depuis ce dépôt GitHub vers votre éditeur.
-4. Enregistrez (`Cmd + S` / `Ctrl + S`).
-
-*(Si vous préférez, vous pouvez utiliser la CLI `clasp` pour pousser tout le projet local d'un coup).*
-
-#### Étape 4 : configurer le manifeste (`appsscript.json`)
-1. Dans l'éditeur Apps Script, cliquez sur l'icône d'engrenage (⚙️) à gauche représentant les **Paramètres du projet**.
-2. Cochez la case **"Afficher le fichier manifeste appsscript.json dans l'éditeur"**.
-3. Revenez à l'éditeur, cliquez sur `appsscript.json`, effacez son contenu, puis collez le code fourni dans le fichier `appsscript.json` de ce dépôt.
-
-#### Étape 5 : initialiser les feuilles
-1. Retournez sur votre onglet Google Sheets et **rafraîchissez la page** (F5 / `Cmd + R`).
-2. Après quelques secondes, un nouveau menu nommé **`🚀 Analyseur de CV`** apparaît à droite du menu "Aide".
-3. Cliquez sur **`🚀 Analyseur de CV`** > **`⚙️ Initialiser / Réinitialiser les feuilles`**.
-4. Autorisez l'exécution du script via les fenêtres d'avertissement Google (cliquez sur "Paramètres avancés" > "Accéder au projet (non sécurisé)").
-5. Confirmez la boîte de dialogue pour finaliser la mise en place. Le classeur est configuré avec une structure épurée à **2 onglets** : `Résultats de l'analyse` et `Journal RGPD` (les paramètres de configuration sont directement stockés de manière invisible et pérenne dans les propriétés du document via la Sidebar).
-
-> **🔄 Mise à jour depuis une version antérieure :** Si vous mettez à jour un projet existant, remplacez impérativement le fichier `appsscript.json` (qui active le service avancé Drive v2 pour la conversion automatique des DOCX et le scope `scriptapp` pour les déclencheurs) et ré-autorisez le script lors du premier lancement. Si une ancienne feuille `Configuration` était présente, ses données sont automatiquement migrées vers `DocumentProperties` lors de l'initialisation.
-
-### 🛠️ Fonctionnalités et utilisation quotidienne
-
-1. **Clé API Gemini** : 
-   - Rendez-vous sur [Google AI Studio](https://aistudio.google.com/app/apikey) et connectez-vous avec votre compte Google.
-   - Cliquez sur **"Create API Key"** (Créer une clé API) et créez-la dans un projet (Payant recommandé pour la stricte confidentialité des données RH).
-   - Copiez la clé générée.
-   - De retour dans Google Sheets, utilisez le menu **`🚀 Analyseur de CV`** > **`🔑 Configurer la clé API`** pour l'enregistrer de façon sécurisée dans `Script Properties` (elle n'est pas affichée dans la feuille).
-2. **Panneau latéral de contrôle (Sidebar MD3)** :
-   * Ouvrez le panneau via le menu **`🚀 Analyseur de CV`** > **`📂 Ouvrir le panneau de contrôle`**.
-   * **Onglet ⚡ Lancer** : Renseignez l'URL du dossier Drive contenant vos CVs et l'annonce (texte ou URL), choisissez le modèle, personnalisez les options avancées (rétention RGPD, domaines autorisés, prompt système) et lancez l'analyse. Tous les réglages sont automatiquement sauvegardés dans le document.
-   * **Onglet 📊 Suivi** : Visualisez en direct la barre de progression, le statut d'avancement et la liste des derniers profils analysés.
-   * **Onglet 👤 Fiche Candidat** : Consultez la fiche enrichie d'un candidat (note / 5, forces, points de vigilance, extrait de compétences) via la liste déroulante ou le bouton de synchronisation **🔄**, avec accès direct au document Drive et rédaction instantanée d'un brouillon Gmail.
-3. **Annonce** : Collez le texte de l'annonce ou son URL dans le formulaire de la Sidebar.
-   - *Protection (SSRF) :* Le système vérifie que le domaine fait partie des **Domaines autorisés** configurés. Si l'URL est bloquée (ex: LinkedIn protégé contre le scraping), copiez-collez directement le texte.
-4. **Modèle** : Sélectionnez `gemini-3.7-flash` (par défaut) pour le meilleur compromis rapidité, qualité de raisonnement et coût.
-5. **Panneau latéral de contrôle (Sidebar MD3)** :
-   * Ouvrez le panneau via le menu **`🚀 Analyseur de CV`** > **`📂 Ouvrir le panneau de contrôle`**.
-   * **Onglet ⚡ Lancer** : Configurez et déclenchez l'analyse de façon asynchrone sans bloquer l'interface.
-   * **Onglet 📊 Suivi** : Visualisez en direct la barre de progression, le statut d'avancement et la liste des derniers profils analysés.
-   * **Onglet 👤 Fiche Candidat** : Consultez la fiche enrichie d'un candidat (note / 5, forces, points de vigilance, extrait de compétences) via la liste déroulante ou le bouton de synchronisation **🔄**, avec accès direct au document Drive et rédaction instantanée d'un brouillon Gmail.
-6. **Traitements & Reprise automatique** :
-   * **Levée de la limite des 6 minutes** : À l'approche du timeout (4m30s) ou en cas de coupure (chien de garde Watchdog), le système programme automatiquement un déclencheur temporaire et poursuit le traitement des lots sans interruption.
-   * **Quotas de déclencheurs** : Notez que le temps cumulé d'exécution des déclencheurs Google Apps Script est plafonné à 90 min/jour pour les comptes personnels Gmail gratuits (@gmail.com) et à 6 h/jour pour les comptes professionnels Google Workspace.
-   * **Prise de contact sélective (Top 10)** : L'algorithme trie les candidatures et propose en statut « À contacter » uniquement les meilleurs profils qualifiés (note ≥ 4/5, plafonné à 10 profils maximum, ou moins s'il y a moins de profils pertinents).
-   * **Automatisation quotidienne** : Activez l'analyse automatique pour recevoir un e-mail récapitulatif chaque nuit à 02h00.
-
-### ✨ Sécurité, Conformité RGPD & Éthique de l'IA
-
-* **Confidentialité des données RH (Gratuit vs Payant)** : En palier gratuit, Google peut utiliser les requêtes pour l'entraînement de ses modèles. **Pour un usage professionnel en conformité RGPD, utilisez un compte Payant (Pay-as-you-go)** dans Google AI Studio afin de garantir la non-conservation et la stricte confidentialité des CVs traités.
-* **Non-discrimination & Biais** : Le prompt système intègre une directive formelle de non-discrimination ordonnant à l'IA d'ignorer toute donnée d'âge, genre, photo, adresse postale ou nationalité, pour se concentrer uniquement sur les compétences objectives.
-* **Supervision humaine & Protection contre l'injection de prompt** : Les emails sont générés en tant que **brouillons Gmail non envoyés**. L'humain reste toujours décisionnaire final avant tout envoi. L'interface Web Sidebar est entièrement immunisée contre les attaques XSS par injection de prompt grâce à un rendu DOM sécurisé (`textContent`).
-* **Nettoyage RGPD & Pseudonymisation** : Paramétrez votre délai de rétention. Le menu `🛡️ Nettoyage RGPD` met à la corbeille Drive les documents expirés et pseudonymise les colonnes d'identification (Nom, Email, Téléphone) dans le tableur.
-* **En-tête API sécurisé** : Les appels API utilisent l'en-tête `x-goog-api-key` pour éliminer tout risque d'exposition de token dans les URLs ou les logs d'exécution.
-
----
-
-## 🇬🇧 English
-
-**An AI-powered recruitment assistant built on Google Sheets using the Gemini API.**
-
-This tool uses the Gemini API (defaulting to `gemini-3.7-flash`) to automatically analyze PDF, DOCX, and Google Docs resumes placed in a Google Drive folder, comparing them to a job description. It evaluates candidate fit, extracts contact information, selects up to the top 10 qualified candidates (score ≥ 4/5) for contact interviews, and automatically drafts personalized response emails in Gmail. The codebase is modularized into 12 files (11 `.gs` scripts and 1 `.html` file) for easy maintenance.
-
-### Key Highlights:
-- **Interactive Control Sidebar**: Material Design 3 sidebar with real-time progress bar, live polling, form configuration, and rich candidate profile cards with prompt-injection-safe DOM rendering.
-- **6-Minute Timeout Bypass**: Automatically schedules self-resuming triggers with watchdog guards to process large volumes of CVs seamlessly without hitting Google Apps Script execution time limits (subject to Google trigger limits: 90 min/day on free accounts, 6h/day on Workspace).
-- **Enterprise-ready Privacy**: Recommends Paid (Pay-as-you-go) Gemini API for confidential data handling complying with GDPR.
-- **Fair & Objective AI**: Enforces anti-bias / non-discrimination directives in system prompts.
-- **Human in the loop**: All emails are prepared as Gmail drafts to ensure review and protect against adversarial prompt injections in CVs.
-- **Selective Contact Top 10**: Caps active interview suggestions to the top 10 qualified profiles without artificial promotion.
-
-*(Please refer to the French documentation above for setup instructions, translating the steps via your preferred tool. The interface inside the Google Sheet is generated in French).*
+License: [Elastic License 2.0](LICENSE).

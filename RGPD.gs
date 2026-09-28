@@ -17,14 +17,14 @@ function purgeOldCVs() {
   }
 
   const config = getConfig();
-  const folderUrl = (config.folderUrl || config['URL du dossier Drive contenant les CVs'] || '').toString().trim();
+  const folderUrl = String(config.folderUrl || '').trim();
 
   if (!folderUrl) {
     SpreadsheetApp.getUi().alert("Configuration manquante : l'URL du dossier Drive n'est pas renseignée.");
     return;
   }
 
-  const retentionDays = Number(config.retentionDays || config['Délai de rétention RGPD (jours)']) || 730;
+  const retentionDays = Number(config.retentionDays) || 730;
 
   if (isNaN(retentionDays) || retentionDays <= 0) {
     SpreadsheetApp.getUi().alert("Nettoyage désactivé : le délai de rétention est à 0 ou invalide.");
@@ -101,24 +101,42 @@ function purgeOldCVs() {
 }
 
 /**
- * Remplace les données identifiantes par 'Pseudonymisé' pour les seuls fichiers purgés de manière ciblée.
+ * Colonnes vidées par la pseudonymisation : l'identité, et tout ce qui cite
+ * le CV. Les extraits recopiés dans « Détail du score » nomment employeurs et
+ * écoles ; « Doublon » et le motif d'un doublon nomment un autre candidat.
+ * Restent la recommandation, le score, les dates et la décision RH : de quoi
+ * garder des statistiques de campagne sans personne derrière.
+ */
+const colonnesPseudonymisees_ = () => [
+  COLONNES_RESULTATS.CANDIDAT, COLONNES_RESULTATS.EMAIL, COLONNES_RESULTATS.TELEPHONE,
+  COLONNES_RESULTATS.MOTIF, COLONNES_RESULTATS.DOUBLON, COLONNES_RESULTATS.DETAIL,
+  COLONNES_RESULTATS.POINTS_FORTS, COLONNES_RESULTATS.VIGILANCE, COLONNES_RESULTATS.EXPERIENCE,
+  COLONNES_RESULTATS.FORMATION, COLONNES_RESULTATS.EVALUATIONS, COLONNES_RESULTATS.FICHIER,
+];
+
+/**
+ * Pseudonymise les seules lignes des fichiers purgés.
  * Ne touche absolument pas aux autres lignes afin de préserver intacts leurs liens RichText et formats de téléphone.
  */
 function anonymizeResultsRowsBulk(sheet, idsDict) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 4) return;
-  
-  const numRows = lastRow - 3;
-  const idValues = sheet.getRange(4, COL_INDEX.FILE_ID, numRows, 1).getValues();
-
-  for (let i = 0; i < numRows; i++) {
-    const currentId = (idValues[i][0] || '').toString().trim();
-    if (idsDict[currentId]) {
-      const rowIdx = 4 + i;
-      sheet.getRange(rowIdx, 1, 1, 3).setValues([["Pseudonymisé", "Pseudonymisé", "Pseudonymisé"]]);
-      sheet.getRange(rowIdx, COL_INDEX.FILE_LINK).setValue("Document purgé");
-    }
-  }
+  const carte = assurerColonnesResultats_(sheet);
+  const remplacement = {
+    [COLONNES_RESULTATS.CANDIDAT]: PSEUDONYME,
+    [COLONNES_RESULTATS.EMAIL]: PSEUDONYME,
+    [COLONNES_RESULTATS.TELEPHONE]: PSEUDONYME,
+    [COLONNES_RESULTATS.FICHIER]: FICHIER_PURGE,
+    [COLONNES_RESULTATS.MOTIF]: 'Pseudonymisé (nettoyage RGPD).',
+  };
+  const blocs = blocsContigus_(carte, colonnesPseudonymisees_());
+  lireLignesResultats_(sheet, carte)
+    .filter((ligne) => idsDict[texteLigne_(ligne, COLONNES_RESULTATS.ID)])
+    .forEach((ligne) => {
+      blocs.forEach(({ debut, noms }) => {
+        sheet.getRange(ligne.numero, debut + 1, 1, noms.length)
+          .setValues([noms.map((nom) => remplacement[nom] || '')]);
+      });
+    });
+  SpreadsheetApp.flush();
 }
 
 /**

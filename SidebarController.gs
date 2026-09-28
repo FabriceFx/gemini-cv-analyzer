@@ -1,7 +1,19 @@
 /**
  * SidebarController.gs
  * Contrôleur serveur pour le panneau latéral (Sidebar) HtmlService.
- * Fait le pont entre l'interface utilisateur MD3 et les services d'analyse/stockage.
+ *
+ * Toutes les fonctions appelées par `google.script.run` sont des `function`
+ * déclarées dont le nom ne finit pas par « _ » : Google rend inappelables
+ * depuis le navigateur les fonctions privées, sans autre signe qu'un
+ * `undefined` côté client.
+ *
+ * Les candidats sont désignés par l'**identifiant de leur fichier**, jamais
+ * par un numéro de ligne : une analyse peut trier l'onglet pendant que le
+ * panneau est ouvert, et un brouillon partirait vers le mauvais candidat.
+ *
+ * Les lectures du panneau ne mettent pas l'onglet à niveau : elles ne prennent
+ * pas le verrou, et deux ajouts de colonnes simultanés doubleraient les
+ * en-têtes. Une colonne absente se lit simplement vide.
  */
 
 /**
@@ -9,26 +21,41 @@
  */
 function showSidebar() {
   const htmlOutput = HtmlService.createHtmlOutputFromFile('Sidebar')
-    .setTitle("🚀 Analyseur de CV AI")
+    .setTitle('🚀 Analyseur de CV AI')
     .setWidth(300);
   SpreadsheetApp.getUi().showSidebar(htmlOutput);
 }
+
+/** Candidats de l'onglet, pour le sélecteur du panneau. */
+const listeCandidats_ = (feuille, carte) => lireLignesResultats_(feuille, carte)
+  .map((ligne) => ({
+    fileId: texteLigne_(ligne, COLONNES_RESULTATS.ID),
+    name: texteLigne_(ligne, COLONNES_RESULTATS.CANDIDAT),
+    recommendation: texteLigne_(ligne, COLONNES_RESULTATS.RECOMMANDATION),
+    score: valeurLigne_(ligne, COLONNES_RESULTATS.SCORE),
+  }))
+  .filter((c) => c.fileId && c.name);
+
+/** Fiche du candidat sur la ligne active de l'onglet Résultats, ou `null`. */
+const candidatDeLaLigneActive_ = (feuille, carte) => {
+  if (SpreadsheetApp.getActiveSheet().getName() !== RESULTS_SHEET_NAME) return null;
+  const active = feuille.getActiveRange();
+  if (!active) return null;
+  const numero = active.getRow();
+  if (numero < PREMIERE_LIGNE_RESULTATS || numero > feuille.getLastRow()) return null;
+  const ligne = lireLignesResultats_(feuille, carte).find((l) => l.numero === numero);
+  return ligne ? ficheCandidatDepuisLigne_(ligne) : null;
+};
 
 /**
  * Récupère l'état initial complet nécessaire au chargement de la Sidebar.
  * @returns {Object}
  */
 function getSidebarInitialData() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const resultsSheet = ss.getSheetByName(RESULTS_SHEET_NAME);
-
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY') || '';
-  const isApiKeySet = apiKey.length > 0;
-
   const config = getConfig();
 
-  // État actuel du job de traitement
-  let jobState = { status: "IDLE", total: 0, processed: 0, successCount: 0, errorCount: 0 };
+  let jobState = { status: 'IDLE', total: 0, processed: 0, successCount: 0, errorCount: 0 };
   const rawState = PropertiesService.getScriptProperties().getProperty(PROP_KEY_JOB_STATE);
   if (rawState) {
     try {
@@ -36,64 +63,45 @@ function getSidebarInitialData() {
     } catch (e) { }
   }
 
-  // Liste des candidats récents pour le sélecteur
-  const candidatesList = [];
+  let candidatesList = [];
   let selectedCandidate = null;
-
-  if (resultsSheet) {
-    const lastRow = resultsSheet.getLastRow();
-    if (lastRow > 3) {
-      const numRows = lastRow - 3;
-      const data = resultsSheet.getRange(4, 1, numRows, 13).getValues();
-      for (let i = 0; i < data.length; i++) {
-        const row = data[i];
-        const name = (row[COL_INDEX.CANDIDATE - 1] || '').toString().trim();
-        const reco = (row[COL_INDEX.RECOMMENDATION - 1] || '').toString().trim();
-        const score = Number(row[COL_INDEX.SCORE - 1]) || 0;
-        const fileId = (row[COL_INDEX.FILE_ID - 1] || '').toString().trim();
-        if (name) {
-          candidatesList.push({
-            rowNumber: 4 + i,
-            name: name,
-            recommendation: reco,
-            score: score,
-            fileId: fileId
-          });
-        }
-      }
-
-      // Détecter si la cellule active est sur une ligne de candidat
-      const activeRange = resultsSheet.getActiveRange();
-      if (activeRange) {
-        const activeRow = activeRange.getRow();
-        if (activeRow >= 4 && activeRow <= lastRow) {
-          selectedCandidate = _buildCandidateObjectFromRow(resultsSheet, activeRow);
-        }
-      }
-
-      // Si aucun candidat n'est actif, prendre le premier par défaut
+  const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RESULTS_SHEET_NAME);
+  if (feuille) {
+    try {
+      const carte = lireEnteteResultats_(feuille).carte;
+      candidatesList = listeCandidats_(feuille, carte);
+      selectedCandidate = candidatDeLaLigneActive_(feuille, carte);
       if (!selectedCandidate && candidatesList.length > 0) {
-        selectedCandidate = _buildCandidateObjectFromRow(resultsSheet, candidatesList[0].rowNumber);
+        selectedCandidate = getCandidateDetails(candidatesList[0].fileId);
       }
+    } catch (e) {
+      Logger.log(`Lecture des candidats impossible : ${e.message}`);
     }
   }
 
   return {
-    isApiKeySet: isApiKeySet,
+    version: ANALYSEUR_CV_VERSION,
+    isApiKeySet: apiKey.length > 0,
     config: {
-      folderUrl: config.folderUrl || '',
-      jobDescription: config.jobDescription || '',
-      model: config.model || 'gemini-3.7-flash',
-      accountType: config.accountType || 'Gratuit (Free tier)',
-      criteria: config.criteria || '',
-      systemPrompt: config.systemPrompt || DEFAULT_PROMPT,
-      retentionDays: config.retentionDays || 730,
-      allowedDomains: config.allowedDomains || DEFAULT_ALLOWED_DOMAINS.join(", ")
+      folderUrl: config.folderUrl,
+      jobDescription: config.jobDescription,
+      model: config.model,
+      accountType: config.accountType,
+      criteria: config.criteria,
+      // Vide = prompt par défaut. Le défaut n'est plus affiché dans le champ :
+      // il y était, et partait dans les réglages au premier enregistrement.
+      systemPrompt: config.systemPrompt,
+      retentionDays: config.retentionDays,
+      allowedDomains: config.allowedDomains,
+      seuilContact: config.seuilContact,
+      seuilVivier: config.seuilVivier,
+      placesContact: config.placesContact,
     },
+    grille: resumeGrille_(),
     availableModels: AVAILABLE_MODELS,
-    jobState: jobState,
-    candidatesList: candidatesList,
-    selectedCandidate: selectedCandidate
+    jobState,
+    candidatesList,
+    selectedCandidate,
   };
 }
 
@@ -104,7 +112,7 @@ function getSidebarInitialData() {
  */
 function saveSidebarConfig(formData) {
   if (!formData || typeof formData !== 'object') {
-    return { ok: false, message: "Données de formulaire invalides." };
+    return { ok: false, message: 'Données de formulaire invalides.' };
   }
   return saveConfig(formData);
 }
@@ -129,8 +137,8 @@ function startAnalysisFromSidebar(formData) {
       try {
         const parsed = JSON.parse(rawState);
         const elapsed = Date.now() - (parsed.lastUpdated || 0);
-        const isRunning = (parsed.status === "RUNNING" || parsed.status === "CONTINUING") && elapsed < 15 * 60 * 1000;
-        const isScheduled = parsed.status === "SCHEDULED" && elapsed < 3 * 60 * 1000;
+        const isRunning = (parsed.status === 'RUNNING' || parsed.status === 'CONTINUING') && elapsed < 15 * 60 * 1000;
+        const isScheduled = parsed.status === 'SCHEDULED' && elapsed < 3 * 60 * 1000;
         if (isRunning || isScheduled) {
           return { ok: false, message: "Une analyse est déjà en cours d'exécution. Veuillez patienter." };
         }
@@ -143,33 +151,34 @@ function startAnalysisFromSidebar(formData) {
       if (!saveRes.ok) return saveRes;
     }
 
-    // 3. Vérifier la clé API
+    // 3. Vérifier la clé API et la grille maintenant, plutôt que dans un déclencheur que personne ne regarde
     const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
     if (!apiKey) {
-      return { ok: false, message: "Clé API non configurée. Utilisez le menu pour configurer votre clé." };
+      return { ok: false, message: 'Clé API non configurée. Utilisez le menu pour configurer votre clé.' };
     }
+    referentielCourant_();
 
     // 4. Initialiser l'état du job en statut SCHEDULED
     _updateProgressState({
-      status: "SCHEDULED",
-      source: "sidebar",
+      status: 'SCHEDULED',
+      source: 'sidebar',
       total: 0,
       processed: 0,
       successCount: 0,
       errorCount: 0,
-      errorMessage: "",
-      currentFileName: "Démarrage programmé (le délai dépend des serveurs Google)...",
-      recentCandidates: []
+      errorMessage: '',
+      currentFileName: 'Démarrage programmé (le délai dépend des serveurs Google)...',
+      recentCandidates: [],
     });
 
     // 5. Lancement asynchrone via déclencheur à +1 seconde (libère immédiatement le client)
     _scheduleImmediateAnalysisTrigger();
 
-    return { ok: true, message: "Analyse programmée avec succès." };
+    return { ok: true, message: 'Analyse programmée avec succès.' };
   } catch (e) {
     _updateProgressState({
-      status: "ERROR",
-      errorMessage: e.message
+      status: 'ERROR',
+      errorMessage: e.message,
     });
     return { ok: false, message: e.message };
   }
@@ -189,20 +198,20 @@ function resetJobProgressState() {
 
     _cleanupContinuationTriggers();
     _updateProgressState({
-      status: "IDLE",
-      source: "sidebar",
+      status: 'IDLE',
+      source: 'sidebar',
       total: 0,
       processed: 0,
       successCount: 0,
       errorCount: 0,
       topContactCount: 0,
-      errorMessage: "",
-      currentFileName: "",
-      recentCandidates: []
+      errorMessage: '',
+      currentFileName: '',
+      recentCandidates: [],
     });
-    return { ok: true, message: "État réinitialisé avec succès." };
+    return { ok: true, message: 'État réinitialisé avec succès.' };
   } catch (e) {
-    return { ok: false, message: "Erreur réinitialisation : " + e.message };
+    return { ok: false, message: `Erreur réinitialisation : ${e.message}` };
   }
 }
 
@@ -224,25 +233,26 @@ function _scheduleImmediateAnalysisTrigger() {
 function getAnalysisProgress() {
   const rawState = PropertiesService.getScriptProperties().getProperty(PROP_KEY_JOB_STATE);
   if (!rawState) {
-    return { status: "IDLE", total: 0, processed: 0, successCount: 0, errorCount: 0, lastUpdated: Date.now() };
+    return { status: 'IDLE', total: 0, processed: 0, successCount: 0, errorCount: 0, lastUpdated: Date.now() };
   }
   try {
     return JSON.parse(rawState);
   } catch (e) {
-    return { status: "ERROR", errorMessage: "Erreur lecture état", lastUpdated: Date.now() };
+    return { status: 'ERROR', errorMessage: 'Erreur lecture état', lastUpdated: Date.now() };
   }
 }
 
 /**
- * Récupère la fiche détaillée d'un candidat par son numéro de ligne dans la feuille Résultats.
- * @param {number} rowNumber
+ * Fiche détaillée d'un candidat, désigné par l'identifiant de son fichier.
+ * @param {string} fileId
  * @returns {Object|null}
  */
-function getCandidateDetailsByRow(rowNumber) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const resultsSheet = ss.getSheetByName(RESULTS_SHEET_NAME);
-  if (!resultsSheet || rowNumber < 4) return null;
-  return _buildCandidateObjectFromRow(resultsSheet, rowNumber);
+function getCandidateDetails(fileId) {
+  const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RESULTS_SHEET_NAME);
+  if (!feuille || !fileId) return null;
+  const carte = lireEnteteResultats_(feuille).carte;
+  const ligne = lireLignesResultats_(feuille, carte).find((l) => texteLigne_(l, COLONNES_RESULTATS.ID) === fileId);
+  return ligne ? ficheCandidatDepuisLigne_(ligne) : null;
 }
 
 /**
@@ -250,66 +260,53 @@ function getCandidateDetailsByRow(rowNumber) {
  * @returns {Object|null}
  */
 function getSelectedCandidateDetails() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const resultsSheet = ss.getSheetByName(RESULTS_SHEET_NAME);
-  if (!resultsSheet) return null;
-
-  const activeRange = resultsSheet.getActiveRange();
-  if (!activeRange) return null;
-
-  const activeRow = activeRange.getRow();
-  if (activeRow < 4 || activeRow > resultsSheet.getLastRow()) return null;
-
-  return _buildCandidateObjectFromRow(resultsSheet, activeRow);
+  const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RESULTS_SHEET_NAME);
+  if (!feuille) return null;
+  return candidatDeLaLigneActive_(feuille, lireEnteteResultats_(feuille).carte);
 }
 
 /**
- * Génère un brouillon d'email Gmail pour un seul candidat spécifié en utilisant la logique partagée d'EmailService.
- * @param {number} rowNumber
+ * Génère un brouillon d'email Gmail pour un seul candidat, désigné par son fichier.
+ *
+ * La décision RH prime ; à défaut, la recommandation. Un brouillon déjà daté
+ * n'est pas refait : effacer la date dans « Brouillon créé le » pour en
+ * obtenir un nouveau est un geste explicite, un double clic ne l'est pas.
+ * @param {string} fileId
  * @returns {{ok: boolean, message: string}}
  */
-function draftSingleCandidateEmail(rowNumber) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const resultsSheet = ss.getSheetByName(RESULTS_SHEET_NAME);
-  if (!resultsSheet) return { ok: false, message: "Feuille de résultats introuvable." };
-
-  const candidate = _buildCandidateObjectFromRow(resultsSheet, rowNumber);
-  if (!candidate || !candidate.email || !isValidEmail(candidate.email)) {
-    return { ok: false, message: "Email du candidat manquant ou invalide." };
+function draftSingleCandidateEmail(fileId) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) {
+    return { ok: false, message: 'Une analyse est en cours ; réessayez à sa fin.' };
   }
+  try {
+    const { feuille, carte } = ongletResultats_();
+    const ligne = lireLignesResultats_(feuille, carte).find((l) => texteLigne_(l, COLONNES_RESULTATS.ID) === fileId);
+    if (!ligne) return { ok: false, message: 'Candidat introuvable : rechargez la liste du panneau.' };
 
-  const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-  const config = getConfig();
-  const model = (config.model || 'gemini-3.7-flash').toString().trim();
+    const deja = texteLigne_(ligne, COLONNES_RESULTATS.BROUILLON);
+    if (deja !== '') {
+      return { ok: false, message: `Un brouillon a déjà été créé pour ce candidat. Pour en obtenir un nouveau, effacez la date de la colonne « ${COLONNES_RESULTATS.BROUILLON} ».` };
+    }
+    const email = cleEmail_(texteLigne_(ligne, COLONNES_RESULTATS.EMAIL));
+    if (!email) return { ok: false, message: 'Email du candidat manquant ou invalide.' };
 
-  if (!apiKey) return { ok: false, message: "Clé API non configurée." };
+    const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+    if (!apiKey) return { ok: false, message: 'Clé API non configurée.' };
 
-  return _createCandidateDraft(candidate, apiKey, model);
-}
-
-/**
- * Construit un objet structuré représentant un candidat à partir de sa ligne.
- * @private
- */
-function _buildCandidateObjectFromRow(resultsSheet, rowNumber) {
-  const row = resultsSheet.getRange(rowNumber, 1, 1, 13).getValues()[0];
-  const richText = resultsSheet.getRange(rowNumber, COL_INDEX.FILE_LINK).getRichTextValue();
-  const fileUrl = richText ? richText.getLinkUrl() : "";
-
-  return {
-    rowNumber: rowNumber,
-    name: (row[COL_INDEX.CANDIDATE - 1] || 'Inconnu').toString().trim(),
-    email: (row[COL_INDEX.EMAIL - 1] || '').toString().trim(),
-    phone: (row[COL_INDEX.PHONE - 1] || '').toString().trim(),
-    experience: (row[COL_INDEX.EXPERIENCE - 1] || '').toString().trim(),
-    education: (row[COL_INDEX.EDUCATION - 1] || '').toString().trim(),
-    skills: (row[COL_INDEX.SKILLS - 1] || '').toString().trim(),
-    strengths: (row[COL_INDEX.STRENGTHS - 1] || '').toString().trim(),
-    weaknesses: (row[COL_INDEX.WEAKNESSES - 1] || '').toString().trim(),
-    recommendation: (row[COL_INDEX.RECOMMENDATION - 1] || 'À garder en vivier').toString().trim(),
-    score: Number(row[COL_INDEX.SCORE - 1]) || 0,
-    fileName: (row[COL_INDEX.FILE_LINK - 1] || '').toString().trim(),
-    fileUrl: fileUrl,
-    fileId: (row[COL_INDEX.FILE_ID - 1] || '').toString().trim()
-  };
+    const { decision } = decisionEffective_(ligne);
+    const resultat = _createCandidateDraft({
+      name: texteLigne_(ligne, COLONNES_RESULTATS.CANDIDAT),
+      email,
+      recommendation: decision,
+      strengths: texteLigne_(ligne, COLONNES_RESULTATS.POINTS_FORTS),
+      weaknesses: texteLigne_(ligne, COLONNES_RESULTATS.VIGILANCE),
+    }, apiKey, getConfig().model);
+    if (resultat.ok) marquerBrouillon_(feuille, carte, fileId);
+    return resultat;
+  } catch (e) {
+    return { ok: false, message: e.message };
+  } finally {
+    lock.releaseLock();
+  }
 }

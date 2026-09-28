@@ -1,0 +1,13 @@
+ .gitignore           |   3 +
+ Config.gs            | 227 +++++++++++----
+ Constants.gs         | 326 ++++++++++++++++------
+ EmailService.gs      | 291 ++++++++++++--------
+ GeminiClient.gs      | 338 ++++++++++-------------
+ Main.gs              | 763 +++++++++++++++++++--------------------------------
+ README.md            | 278 ++++++++++++-------
+ RGPD.gs              |  52 ++--
+ Sidebar.html         | 311 ++++++++++++++++-----
+ SidebarController.gs | 277 +++++++++----------
+ UI.gs                | 306 ++++++++++++---------
+ Utils.gs             | 190 ++++++++-----
+ 12 files changed, 1942 insertions(+), 1420 deletions(-)
