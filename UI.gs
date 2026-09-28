@@ -344,7 +344,7 @@ function showAboutDialog() {
     isEn = false;
   }
 
-  const title = isEn ? 'About CV Analyzer' : "À propos de l'Analyseur de CV";
+  const title = isEn ? 'About CV Analyzer' : "À propos de l'analyseur de CV";
   const content = isEn
     ? "This tool evaluates CVs against the job ad with Google's Gemini AI, criterion by criterion, using the evaluation grid set by your HR team. The score is computed from that grid, and every recommendation states its reason."
     : "Cet outil évalue les CV au regard de l'annonce avec l'IA Gemini de Google, critère par critère, selon la grille fixée par votre équipe RH. Le score est calculé à partir de cette grille, et chaque recommandation dit son motif.";
@@ -371,8 +371,8 @@ function showAboutDialog() {
   </style>
 </head>
 <body>
-  <h2>ℹ️ ${title}</h2>
-  <div class="version">Version ${ANALYSEUR_CV_VERSION}</div>
+  <!-- Titre géré par la boîte de dialogue Google (showModalDialog) -->
+  <div class="version" style="margin-top: 8px;">Version ${ANALYSEUR_CV_VERSION}</div>
   <p>${content}</p>
   <div class="dev-info">
     <strong>${devTitle} :</strong> Fabrice Faucheux<br><br>

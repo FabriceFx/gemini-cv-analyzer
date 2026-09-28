@@ -4,6 +4,10 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 Ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/). Les
 versions antérieures à la 1.0.0 n'étaient pas numérotées.
 
+## [1.0.5] - 2026-09-28
+
+- Le nom de l'outil apparaissait deux fois dans la fenêtre « À propos » (titre de la fenêtre et contenu) ; le titre interne a été supprimé pour ne garder que celui de Google.
+
 ## [1.0.4] - 2026-09-28
 
 - Casse typographique : suppression des majuscules à l'anglaise (« Title Case ») dans l'interface du panneau pour suivre la règle française.
