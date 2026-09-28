@@ -6,8 +6,25 @@
 /**
  * Supprime les CV du dossier Drive dont la date dépasse le délai de conservation RGPD.
  * Les place dans la corbeille par sécurité, pseudonymise les données d'identification dans la feuille, et écrit dans le journal.
+ *
+ * Sous le verrou, comme tout ce qui écrit dans l'onglet : une analyse qui
+ * trie les lignes pendant la pseudonymisation ferait effacer le nom d'un
+ * autre candidat.
  */
 function purgeOldCVs() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) {
+    SpreadsheetApp.getUi().alert("Une analyse ou une autre opération est en cours sur l'onglet des résultats. Relancez le nettoyage RGPD à sa fin.");
+    return;
+  }
+  try {
+    purgerAnciensCv_();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+const purgerAnciensCv_ = () => {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const resultsSheet = ss.getSheetByName(RESULTS_SHEET_NAME);
 
@@ -98,7 +115,7 @@ function purgeOldCVs() {
   }
 
   SpreadsheetApp.getUi().alert(`Nettoyage RGPD terminé :\n\n${purgeMessage}`);
-}
+};
 
 /**
  * Colonnes vidées par la pseudonymisation : l'identité, et tout ce qui cite

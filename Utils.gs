@@ -164,6 +164,8 @@ function mergeJobState(existing, updates, now) {
     currentFileName: patch.currentFileName !== undefined ? String(patch.currentFileName) : (current.currentFileName || ''),
     errorMessage: patch.errorMessage !== undefined ? String(patch.errorMessage) : (current.errorMessage || ''),
     recentCandidates: Array.isArray(patch.recentCandidates) ? patch.recentCandidates : (Array.isArray(current.recentCandidates) ? current.recentCandidates : []),
+    // Début d'une attente de verrou (0 : pas d'attente). Sert à borner les nouveaux essais.
+    waitingSince: patch.waitingSince !== undefined ? Number(patch.waitingSince) || 0 : (Number(current.waitingSince) || 0),
     lastUpdated: timestamp,
   };
 }

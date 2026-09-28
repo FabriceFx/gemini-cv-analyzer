@@ -61,7 +61,7 @@ const largeursColonnesResultats_ = () => ({
 
 /** Ce que chaque colonne veut dire, là où on la lit : en note sur l'en-tête. */
 const notesEnteteResultats_ = () => ({
-  [COLONNES_RESULTATS.RECOMMANDATION]: "Proposition de l'outil, recalculée à chaque classement :\nÀ contacter : score ≥ seuil de contact et indispensables démontrés, dans la limite des places ;\nÀ garder en vivier ; À refuser ;\nDoublon : autre CV de la même personne ;\nÀ réanalyser : évalué avec une autre annonce ou une autre grille.",
+  [COLONNES_RESULTATS.RECOMMANDATION]: "Proposition de l'outil, recalculée à chaque classement :\nÀ contacter : score ≥ seuil de contact et indispensables démontrés, dans la limite des places ;\nÀ garder en vivier : sous le seuil de contact, au-delà des places, ou indispensable à vérifier ;\nÀ refuser : score sous le seuil de vivier ;\nDoublon : autre CV de la même personne ;\nÀ réanalyser : évalué avec une autre annonce ou une autre grille.",
   [COLONNES_RESULTATS.SCORE]: 'Moyenne pondérée des critères de la grille : Satisfait = 1, Partiel = 0,5, Non démontré = 0. Le calcul figure dans « Détail du score ». Vide : non mesuré (erreur ou CV à réanalyser).',
   [COLONNES_RESULTATS.MOTIF]: 'Pourquoi cette recommandation : seuil atteint ou non, indispensable manquant, rang au-delà des places, doublon.',
   [COLONNES_RESULTATS.DECISION]: "Votre décision. Le code ne l'écrit jamais. Elle prime sur la recommandation pour les brouillons d'email ; tout autre texte que les trois décisions veut dire « je m'en occupe » et ne génère pas de brouillon.",
@@ -224,11 +224,11 @@ function showGuide() {
       <h3><span class="icon">⚖️</span> 2. Comment se décide « À contacter »</h3>
       <table>
         <tr><th>Recommandation</th><th>Condition</th></tr>
-        <tr><td>À refuser</td><td>un indispensable non démontré, ou score sous le seuil de vivier</td></tr>
-        <tr><td>À garder en vivier</td><td>un indispensable seulement partiel, ou score sous le seuil de contact, ou au-delà des places</td></tr>
+        <tr><td>À refuser</td><td>score sous le seuil de vivier</td></tr>
+        <tr><td>À garder en vivier</td><td>un indispensable non démontré par le CV ou seulement en partie (« à vérifier »), ou score sous le seuil de contact, ou rang au-delà des places</td></tr>
         <tr><td>À contacter</td><td>score au moins égal au seuil de contact, indispensables démontrés, dans la limite des places</td></tr>
       </table>
-      <p>Les places sont un <b>maximum</b> : s'il n'y a que trois bons profils, il y a trois « À contacter ». Le motif de chaque ligne dit pourquoi.</p>
+      <p>Les places sont un <b>maximum</b> : s'il n'y a que trois bons profils, il y a trois « À contacter ». Un indispensable absent du CV ne fait pas refuser : un CV muet sur un point n'est pas un candidat qui en manque. Le motif de chaque ligne dit pourquoi.</p>
 
       <h3><span class="icon">🔁</span> 3. Ajuster sans tout refaire</h3>
       <p>Changer un niveau, un poids, un seuil ou le nombre de places, ou retirer un critère : <b>Recalculer le classement</b>, sans appel à Gemini. Ajouter ou reformuler un critère, changer l'annonce, les consignes ou le modèle : les CV concernés passent « À réanalyser » et le sont au prochain lancement.</p>

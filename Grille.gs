@@ -22,7 +22,7 @@
 /** Note de chaque en-tête. Construite à l'appel : COLONNES_GRILLE vit dans un autre fichier. */
 const notesEnteteGrille_ = () => ({
   [COLONNES_GRILLE.CRITERE]: 'Un élément vérifiable à la lecture d\'un CV : compétence, expérience et sa durée, diplôme, langue, outil, secteur. Un critère par ligne.\n\nAjouter ou reformuler un critère oblige à réanalyser les CV ; en retirer un ne demande qu\'un recalcul (menu « Recalculer le classement »).',
-  [COLONNES_GRILLE.NIVEAU]: 'Indispensable : un CV qui ne le démontre pas est refusé ; démontré en partie, il reste au mieux en vivier.\nImportant, Souhaitable : ne comptent que dans le score.\n\nChanger un niveau ne demande pas de réanalyse : menu « Recalculer le classement ».',
+  [COLONNES_GRILLE.NIVEAU]: 'Indispensable : un CV qui ne le démontre pas, ou seulement en partie, ne peut pas être « À contacter » ; il reste au mieux en vivier, « à vérifier ». Il n\'est pas refusé pour autant : un CV muet sur un point n\'est pas un candidat qui en manque.\nImportant, Souhaitable : ne comptent que dans le score.\n\nChanger un niveau ne demande pas de réanalyse : menu « Recalculer le classement ».',
   [COLONNES_GRILLE.POIDS]: 'Poids du critère dans le score (nombre positif).\nVide : 3 pour Indispensable, 2 pour Important, 1 pour Souhaitable.\n\nChanger un poids ne demande pas de réanalyse : menu « Recalculer le classement ».',
   [COLONNES_GRILLE.PRECISIONS]: 'Facultatif. Ce qui aide l\'IA à trancher : durée minimale, équivalences admises, ce qui ne compte pas.\n\nModifier les précisions oblige à réanalyser les CV.',
 });
@@ -308,7 +308,7 @@ const proposerCriteres_ = (annonce, consignes, apiKey, model) => {
     'Propose entre 5 et 10 critères qui permettent de départager les candidatures. Chaque critère :',
     "porte sur un seul élément vérifiable à la lecture d'un CV (compétence, expérience et sa durée, diplôme, certification, langue, outil, secteur) ;",
     'se formule en quelques mots, sans négation ;',
-    "reçoit un niveau : « Indispensable » seulement si l'offre l'exige explicitement (exigé, impératif, obligatoire, diplôme réglementé), au point qu'un CV qui ne le montre pas doive être écarté ; « Important » s'il pèse nettement dans le choix ; « Souhaitable » s'il est un plus ;",
+    "reçoit un niveau : « Indispensable » seulement si l'offre l'exige explicitement (exigé, impératif, obligatoire, diplôme réglementé), au point qu'on ne contacterait pas un candidat sans l'avoir vérifié ; « Important » s'il pèse nettement dans le choix ; « Souhaitable » s'il est un plus ;",
     'peut porter des précisions qui aident à trancher (durée minimale, équivalences admises).',
     'Trois critères « Indispensable » au plus.',
     "N'utilise aucun critère discriminatoire (âge, sexe, origine, nationalité, situation de famille, santé, handicap, apparence) ni aucun savoir-être invérifiable sur un CV (motivation, dynamisme, esprit d'équipe).",
@@ -359,7 +359,7 @@ const ecrireGrilleProposee_ = (criteres) => {
 const bilanProposition_ = (criteres) => {
   const indispensables = criteres.filter((c) => c.niveau === NIVEAUX_CRITERE.INDISPENSABLE).map((c) => c.critere);
   return `${criteres.length} critères proposés${indispensables.length ? `, dont ${indispensables.length} indispensable${indispensables.length > 1 ? 's' : ''} (${indispensables.join(', ')})` : ''}. `
-    + "Relisez-les dans l'onglet « Grille d'évaluation » — surtout les niveaux : un critère indispensable non démontré fait refuser le CV — puis lancez l'analyse.";
+    + "Relisez-les dans l'onglet « Grille d'évaluation » — surtout les niveaux et les poids : un indispensable que le CV ne démontre pas le plafonne au vivier — puis lancez l'analyse.";
 };
 
 /** Offre de référence et clé API, ou une exception qui dit quoi renseigner. */

@@ -28,8 +28,8 @@ Pour l'installer et s'en servir, voir **[DEMARRAGE.md](DEMARRAGE.md)**.
 
 | Recommandation | Condition |
 |---|---|
-| À refuser | un critère indispensable non démontré, ou score sous le seuil de vivier (40) |
-| À garder en vivier | un indispensable démontré en partie seulement, ou score sous le seuil de contact (70), ou rang au-delà des places |
+| À refuser | score sous le seuil de vivier (40) |
+| À garder en vivier | un indispensable que le CV ne démontre pas, ou seulement en partie (« à vérifier »), ou score sous le seuil de contact (70), ou rang au-delà des places |
 | À contacter | score au moins égal au seuil de contact, indispensables démontrés, dans la limite des places (10) |
 | Doublon | autre CV de la même personne ; seule la fiche la mieux notée est classée |
 | À réanalyser | évalué avec une autre annonce, d'autres consignes, un autre prompt, un autre modèle, ou avant l'ajout d'un critère |
@@ -62,6 +62,7 @@ un **maximum** : l'outil ne complète jamais.
 | Chaque statut porte un extrait du CV. | Un score qui ne sait pas dire d'où il vient ne survit pas à la première contestation. |
 | Le niveau et le poids ne sont pas montrés à l'IA. | Elle constate sans indulgence, et l'on peut les changer sans réanalyser. |
 | Seuils absolus, places en maximum. | « Top 10 » voulait dire « toujours 10 » ; l'équipe RH n'en voulait que les bons. |
+| Un indispensable absent du CV plafonne au vivier, sans refuser. | Un CV muet sur un point n'est pas un candidat qui en manque ; refuser là-dessus prendrait une présomption pour un fait. |
 | Un fait et une présomption dans deux cases. | Même email : doublon. Même nom : « À vérifier ». Un homonyme n'est pas écarté. |
 | « Décision RH » n'est jamais écrite par le code. | La proposition de l'outil se recalcule ; la décision humaine, non. |
 | Colonnes retrouvées par leur en-tête. | Une colonne ajoutée par l'équipe ne décale aucune écriture. |
@@ -146,6 +147,11 @@ Réintroduire un défaut doit faire échouer le banc :
 | Critère retiré qui oblige à réanalyser | Critère retiré = rien à refaire |
 | Seuil de contact exclusif | Recommandation par seuils absolus |
 | `muteHttpExceptions` retiré de la lecture d'annonce | Une annonce en 403 donne le message prévu |
+| Indispensable absent du CV qui refuse | Un indispensable absent du CV plafonne au vivier |
+| Colonnes de l'ancien modèle laissées en place | Mise à niveau d'un classeur v0 |
+| Démarrage qui repart en silence, verrou pris | Déclencheur arrivé pendant une autre opération |
+| Chien de garde posé hors du `try` | Chien de garde impossible à poser |
+| Nettoyage RGPD sans verrou | RGPD : pas de nettoyage pendant une autre opération |
 
 Avant de pousser :
 
@@ -171,9 +177,12 @@ aside and prepares reply drafts in Gmail.
 - **Gemini states, the code scores.** For each criterion of the grid, Gemini
   returns Satisfied, Partial or Not shown, with a quote from the CV; the score
   is a weighted average computed in code, and every row shows its calculation.
-- **Absolute thresholds, seats as a maximum.** A missing must-have criterion
-  rejects the CV; only candidates above the contact threshold are proposed,
-  and never more than the number of seats — never padded up to it.
+- **Absolute thresholds, seats as a maximum.** Only candidates above the
+  contact threshold, with every must-have criterion shown, are proposed, and
+  never more than the number of seats — never padded up to it. A must-have the
+  CV does not mention keeps it in the talent pool, flagged « à vérifier »: a CV
+  silent on a point is not a candidate lacking it. Rejection comes from the
+  score alone.
 - **One row per person.** Same email or same phone: one CV is ranked, the
   others are marked « Doublon ». Same name only, or a contact shared by
   different names (a recruitment agency): flagged for review, nothing removed.

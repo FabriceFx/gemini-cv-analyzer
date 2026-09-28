@@ -8,7 +8,7 @@
  */
 
 /** Numéro de la version courante. Le banc vérifie qu'il vaut le fichier VERSION. */
-const ANALYSEUR_CV_VERSION = '1.0.0';
+const ANALYSEUR_CV_VERSION = '1.0.1';
 
 const RESULTS_SHEET_NAME = "Résultats de l'analyse";
 const GRILLE_SHEET_NAME = "Grille d'évaluation";
@@ -58,6 +58,18 @@ const ORDRE_COLONNES_RESULTATS = Object.freeze([
   COLONNES_RESULTATS.BROUILLON, COLONNES_RESULTATS.EVALUATIONS, COLONNES_RESULTATS.REFERENTIEL,
   COLONNES_RESULTATS.ORDRE, COLONNES_RESULTATS.ID,
 ]);
+
+/**
+ * Colonnes de la version non numérotée que la v1 n'écrit plus.
+ *
+ * La mise à niveau v1.0.0 les laissait en place : une ligne réanalysée
+ * montrait l'ancienne note globale (« 4 » sur 5) à côté du nouveau score
+ * (« 42 » sur 100), deux chiffres de deux modèles différents. Elles sont
+ * désormais supprimées à la mise à niveau : leur contenu, produit par l'ancien
+ * modèle, ne vaut plus rien, et une colonne masquée finit toujours par être
+ * réaffichée et relue.
+ */
+const COLONNES_OBSOLETES_V0 = Object.freeze(['Top 3 compétences', 'Note / 5']);
 
 /** Colonnes masquées : utiles au code, sans intérêt pour la lecture. */
 const COLONNES_TECHNIQUES = Object.freeze([

@@ -648,6 +648,11 @@
       });
     }
 
+    function formatDuree(ms) {
+      const secondes = Math.round(ms / 1000);
+      return secondes < 60 ? `${secondes} s` : `${Math.floor(secondes / 60)} min ${String(secondes % 60).padStart(2, '0')} s`;
+    }
+
     function formatScore(score) {
       return score === '' || score === null || score === undefined ? '—' : `${score}/100`;
     }
@@ -839,7 +844,7 @@
 
     function openGrid() {
       google.script.run
-        .withSuccessHandler(() => showToast("Grille ouverte. Relisez les niveaux : un indispensable non démontré fait refuser le CV.", "info", 7000))
+        .withSuccessHandler(() => showToast("Grille ouverte. Relisez les niveaux et les poids : un indispensable que le CV ne démontre pas le plafonne au vivier.", "info", 7000))
         .withFailureHandler(err => showToast("Erreur : " + err.message, "error"))
         .ouvrirGrilleEvaluation();
     }
@@ -924,11 +929,9 @@
         .withSuccessHandler(state => {
           updateJobDisplay(state);
           if (state) {
-            // Détection état SCHEDULED périmé (> 3 min sans démarrage du trigger)
-            if (state.status === 'SCHEDULED' && state.lastUpdated && (Date.now() - state.lastUpdated > 3 * 60 * 1000)) {
-              state.status = 'ERROR';
-              state.errorMessage = 'Le déclencheur a tardé à démarrer. Vous pouvez relancer ou réinitialiser.';
-              updateJobDisplay(state);
+            // Attente de Google très longue (> 15 min) : on cesse d'interroger, le message dit quoi faire.
+            // En deçà, on continue : un déclencheur qui démarre à la 4e minute doit encore se voir.
+            if (state.status === 'SCHEDULED' && state.lastUpdated && (Date.now() - state.lastUpdated > 15 * 60 * 1000)) {
               stopPolling();
               return;
             }
@@ -996,11 +999,18 @@
       document.getElementById('statTopContactLabel').textContent = `À contacter (max ${placesContact})`;
 
       if (state.status === 'SCHEDULED') {
+        const attente = state.lastUpdated ? Math.max(0, Date.now() - state.lastUpdated) : 0;
         pill.className = 'status-pill warn';
-        pill.textContent = 'Programmé';
-        stepLbl.textContent = state.currentFileName || 'Démarrage programmé...';
         bar.className = 'progress-bar animated';
         continuationNotice.style.display = 'none';
+        if (attente > 3 * 60 * 1000) {
+          // Ni « erreur » ni silence : ce qu'on sait, ce qui peut l'expliquer, où regarder.
+          pill.textContent = 'Attente';
+          stepLbl.textContent = `Google n'a pas encore lancé l'analyse (${formatDuree(attente)}). Causes possibles : file d'attente de Google, ou quota quotidien des déclencheurs atteint. Vérifiez Apps Script › Exécutions ; vous pouvez aussi « Débloquer » puis relancer.`;
+        } else {
+          pill.textContent = 'Programmé';
+          stepLbl.textContent = `${state.currentFileName || 'Démarrage programmé...'} (depuis ${formatDuree(attente)})`;
+        }
       } else if (state.status === 'RUNNING') {
         pill.className = 'status-pill busy';
         pill.textContent = 'En cours...';

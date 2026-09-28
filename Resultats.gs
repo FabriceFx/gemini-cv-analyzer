@@ -84,6 +84,18 @@ const appliquerFormatColonne_ = (feuille, carte, nom) => {
  */
 const assurerColonnesResultats_ = (feuille) => {
   const { entete, carte } = lireEnteteResultats_(feuille);
+
+  // Colonnes de l'ancien modèle : supprimées, de la plus à droite à la plus à
+  // gauche pour que chaque position reste juste, puis l'en-tête est relu —
+  // toutes les colonnes situées après ont glissé d'un cran.
+  const obsoletes = COLONNES_OBSOLETES_V0.filter((nom) => nom in carte);
+  if (obsoletes.length > 0) {
+    obsoletes.map((nom) => carte[nom]).sort((a, b) => b - a)
+      .forEach((position) => feuille.deleteColumn(position + 1));
+    Logger.log(`Colonnes de l'ancienne version supprimées : ${obsoletes.join(', ')}.`);
+    return assurerColonnesResultats_(feuille);
+  }
+
   const manquantes = ORDRE_COLONNES_RESULTATS.filter((nom) => !(nom in carte));
   if (manquantes.length === 0) return carte;
 

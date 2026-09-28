@@ -41,6 +41,49 @@ function _notifyAutomatedFailure(reason) {
   }
 }
 
+/** État du travail en cours, tel que le panneau le lit ; objet vide s'il est illisible. */
+const lireEtatTravail_ = () => {
+  try {
+    return JSON.parse(PropertiesService.getScriptProperties().getProperty(PROP_KEY_JOB_STATE) || '{}') || {};
+  } catch (e) {
+    return {};
+  }
+};
+
+/** Au-delà, on renonce à attendre qu'une autre opération libère l'outil. */
+const ATTENTE_MAX_VERROU_MS_ = 15 * 60 * 1000;
+
+/**
+ * Le déclencheur est arrivé, mais une autre opération tient le verrou
+ * (recalcul, brouillons, proposition de grille, autre analyse).
+ *
+ * Jusqu'à la v1.0.0, on repartait sans rien dire : l'état restait
+ * « Programmé » (ou « Reprise ») pour toujours, et le panneau finissait par
+ * accuser Google d'un retard qui n'était pas le sien. On réessaie donc dans une
+ * minute, en le disant ; au-delà d'un quart d'heure, on renonce, en le disant
+ * aussi.
+ */
+const attendreVerrou_ = (etat, source) => {
+  const depuis = Number(etat.waitingSince) || Date.now();
+  if (Date.now() - depuis > ATTENTE_MAX_VERROU_MS_) {
+    _cleanupContinuationTriggers();
+    _updateProgressState({
+      status: 'ERROR',
+      source,
+      waitingSince: 0,
+      errorMessage: "L'outil est occupé par une autre opération depuis plus de 15 minutes : l'analyse n'a pas démarré. Relancez-la quand l'autre opération sera terminée.",
+    });
+    return;
+  }
+  _scheduleContinuationTrigger();
+  _updateProgressState({
+    status: etat.status,
+    source,
+    waitingSince: depuis,
+    currentFileName: "Une autre opération occupe l'outil (analyse, recalcul, brouillons ou grille) : nouvel essai dans 1 minute.",
+  });
+};
+
 /**
  * Tout ce qu'il faut pour évaluer des CV : clé, annonce de référence, grille,
  * réglages, empreinte du référentiel et contexte Gemini. Lève une erreur qui
@@ -156,27 +199,21 @@ function _runAnalysis(options) {
   if (!lock.tryLock(5000)) {
     if (canUseUi) {
       SpreadsheetApp.getActiveSpreadsheet().toast('Une analyse est déjà en cours, veuillez patienter.', '⏳');
-    } else if (source === 'sidebar') {
-      const rawState = PropertiesService.getScriptProperties().getProperty(PROP_KEY_JOB_STATE);
-      let isAlreadyRunning = false;
-      if (rawState) {
-        try {
-          const parsed = JSON.parse(rawState);
-          const elapsed = Date.now() - (parsed.lastUpdated || 0);
-          const isRunning = (parsed.status === 'RUNNING' || parsed.status === 'CONTINUING') && elapsed < 15 * 60 * 1000;
-          const isScheduled = parsed.status === 'SCHEDULED' && elapsed < 3 * 60 * 1000;
-          isAlreadyRunning = isRunning || isScheduled;
-        } catch (e) { }
-      }
-      if (!isAlreadyRunning) {
-        _updateProgressState({ status: 'BUSY', errorMessage: "Une analyse est déjà en cours d'exécution." });
-      }
+      return;
+    }
+    const etat = lireEtatTravail_();
+    const enAttente = etat.status === 'SCHEDULED' || etat.status === 'CONTINUING';
+    const enCours = etat.status === 'RUNNING' && Date.now() - (etat.lastUpdated || 0) < 15 * 60 * 1000;
+    if (isContinuation && enAttente) {
+      attendreVerrou_(etat, source);
+    } else if (source === 'sidebar' && !enCours) {
+      _updateProgressState({ status: 'BUSY', errorMessage: "Une analyse est déjà en cours d'exécution." });
     }
     return;
   }
+  // L'attente est finie : on efface sa trace, pour qu'une attente future reparte de zéro.
+  if (Number(lireEtatTravail_().waitingSince)) _updateProgressState({ waitingSince: 0 });
 
-  // Chien de garde à +7 minutes, au cas où l'exécution serait tuée net.
-  _scheduleWatchdogTrigger();
   const startTime = Date.now();
 
   const echouer = (message, messageUi) => {
@@ -187,6 +224,10 @@ function _runAnalysis(options) {
   };
 
   try {
+    // Chien de garde à +7 minutes, au cas où l'exécution serait tuée net.
+    // Dans le try : s'il ne peut être posé (vingt déclencheurs, service
+    // indisponible), l'état passe en erreur au lieu de rester « Programmé ».
+    _scheduleWatchdogTrigger();
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
     let feuille;

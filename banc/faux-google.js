@@ -43,6 +43,8 @@ const installerFauxGoogle = (sandbox, { racine, DateContexte, options = {} }) =>
   const reponsesUi = [];
   const reponsesPrompt = [];
   const verrou = { tenuAilleurs: false, tenu: false };
+  // Pannes à la demande : nombre de créations de déclencheur qui échoueront.
+  const pannes = { creationDeclencheur: 0 };
   const declencheurs = [];
   let compteurDeclencheurs = 0;
 
@@ -172,6 +174,11 @@ const installerFauxGoogle = (sandbox, { racine, DateContexte, options = {} }) =>
       return this;
     }
 
+    setNote(note) {
+      if (typeof note !== 'string') throw new Error('Exception: Invalid argument: note');
+      return this;
+    }
+
     setDataValidation(regle) {
       if (regle !== null && (!regle || regle.__validation !== true)) throw new Error('Exception: Invalid argument: rule');
       return this;
@@ -293,6 +300,16 @@ const installerFauxGoogle = (sandbox, { racine, DateContexte, options = {} }) =>
         ligne.splice(apres, 0, ...Array.from({ length: nombre }, () => new Cellule()));
       });
       this.maxColonnes += nombre;
+      return this;
+    }
+
+    deleteColumn(position) {
+      if (position < 1 || position > this.maxColonnes) throw new Error('The coordinates of the range are outside the dimensions of the sheet.');
+      if (this.maxColonnes === 1) throw new Error('Sorry, it is not possible to delete all non-frozen columns.');
+      this.lignes.forEach((ligne) => { if (ligne.length >= position) ligne.splice(position - 1, 1); });
+      this.maxColonnes -= 1;
+      this.masquees = new Set([...this.masquees].filter((c) => c !== position).map((c) => (c > position ? c - 1 : c)));
+      journal.colonnesSupprimees = (journal.colonnesSupprimees || 0) + 1;
       return this;
     }
 
@@ -520,6 +537,10 @@ const installerFauxGoogle = (sandbox, { racine, DateContexte, options = {} }) =>
       if (typeof fonction !== 'string' || fonction === '') throw new Error('Exception: Invalid argument: functionName');
       const d = { fonction, type: null };
       const creer = () => {
+        if (pannes.creationDeclencheur > 0) {
+          pannes.creationDeclencheur--;
+          throw new Error('Exception: Service error: ScriptApp');
+        }
         compteurDeclencheurs++;
         if (declencheurs.length >= 20) throw new Error('This script has too many triggers. Triggers must be deleted from the script before more can be added.');
         const declencheur = { getHandlerFunction: () => fonction, getUniqueId: () => `d${compteurDeclencheurs}`, d };
@@ -742,6 +763,7 @@ const installerFauxGoogle = (sandbox, { racine, DateContexte, options = {} }) =>
     classeur,
     proprietes,
     verrou,
+    pannes,
     declencheurs,
     fichiers,
     dossiers,

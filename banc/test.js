@@ -224,12 +224,32 @@ test('Score : moyenne pondérée, calcul affiché', () => {
   assert.ok(!f('scorerEvaluations_')(criteres.slice(1).concat(criteres[0]), {}).complet, 'un critère sans évaluation n\'est pas « non démontré »');
 });
 
-test('Recommandation par seuils absolus : un indispensable manquant refuse, un partiel plafonne au vivier', () => {
+test('Défaut v1.0.0 : un indispensable absent du CV plafonne au vivier « à vérifier », il ne fait pas refuser', () => {
+  // Premier essai réel : un profil solide, muet sur son niveau d'anglais
+  // (indispensable), était refusé. « Non démontré » veut dire « le CV n'en dit
+  // rien », pas « le candidat ne l'a pas ».
+  const { f } = charger();
+  const criteres = grilleUnitaire(f);
+  const reglages = { seuilContact: 70, seuilVivier: 40, placesContact: 10 };
+  const base = (lettres) => f('recommandationDeBase_')(f('scorerEvaluations_')(criteres, evaluations(criteres, lettres)), reglages);
+  const muet = base('NSSS');
+  assert.strictEqual(muet.recommandation, 'À garder en vivier');
+  assert.ok(muet.motif.includes('non démontré par le CV (Python en production)') && muet.motif.includes('à vérifier'), muet.motif);
+  // Jamais « À contacter » sans les indispensables, même avec un score au-dessus du seuil.
+  const criteresLegers = criteres.map((c, i) => (i === 0 ? { ...c, poids: 0.5 } : c));
+  const fort = f('recommandationDeBase_')(f('scorerEvaluations_')(criteresLegers, evaluations(criteresLegers, 'NSSS')), reglages);
+  assert.ok(fort.recommandation === 'À garder en vivier', `${fort.recommandation} ; ${fort.motif}`);
+  // Le refus ne vient que du score.
+  const faible = base('NNNS');
+  assert.strictEqual(faible.recommandation, 'À refuser');
+  assert.ok(faible.motif.startsWith('Score 13 < seuil de vivier 40.') && faible.motif.includes('En outre'), faible.motif);
+});
+
+test('Recommandation par seuils absolus : un partiel plafonne au vivier, le refus vient du score', () => {
   const { f } = charger();
   const criteres = grilleUnitaire(f);
   const reglages = { seuilContact: 70, seuilVivier: 40, placesContact: 10 };
   const reco = (lettres) => f('recommandationDeBase_')(f('scorerEvaluations_')(criteres, evaluations(criteres, lettres)), reglages).recommandation;
-  assert.strictEqual(reco('NSSS'), 'À refuser');
   assert.strictEqual(reco('PSSS'), 'À garder en vivier');
   assert.strictEqual(reco('SSSN'), 'À contacter');
   assert.strictEqual(reco('SSNN'), 'À garder en vivier');
@@ -474,10 +494,11 @@ test('Analyse complète : places, doublons, présomptions, formules, erreurs et 
   assert.strictEqual(l.cv14.Doublon, '');
   assert.strictEqual(l.cv15.Doublon, '');
 
-  // Indispensable : non démontré → refus ; partiel → vivier.
-  assert.strictEqual(l.cv06.Recommandation, 'À refuser');
-  assert.ok(l.cv06['Motif de la recommandation'].includes('Indispensable non démontré : Python en production'));
+  // Indispensable non démontré ou partiel → vivier, « à vérifier » ; jamais de refus pour un CV muet.
+  assert.strictEqual(l.cv06.Recommandation, 'À garder en vivier');
+  assert.ok(l.cv06['Motif de la recommandation'].includes('Indispensable non démontré par le CV (Python en production)'), l.cv06['Motif de la recommandation']);
   assert.strictEqual(l.cv09.Recommandation, 'À garder en vivier');
+  assert.ok(l.cv09['Motif de la recommandation'].includes('démontré en partie'));
 
   // Formule venue d'un CV : relue comme texte.
   assert.strictEqual(l.cv08.Candidat, FORMULE);
@@ -644,7 +665,14 @@ test('Mise à niveau d\'un classeur v0 : colonnes ajoutées, lignes réanalysée
   const toutes = lignes(g);
   assert.strictEqual(toutes.length, 3, 'réanalyse sur place');
   assert.ok(toutes.every((x) => typeof x['Score / 100'] === 'number'));
-  assert.ok('Note / 5' in toutes[0], 'les anciennes colonnes restent, rien n\'est effacé');
+  // Défaut v1.0.0 : « Note / 5 » (ancien modèle) restait affichée à côté du score — « 4/5 » et « 42/100 ».
+  const entete = feuille.getRange(3, 1, 1, feuille.getLastColumn()).getValues()[0];
+  assert.ok(!entete.some((nom) => /Note \/ 5|Top 3 compétences/.test(nom)), `colonnes de l'ancien modèle encore là : ${entete}`);
+  // Les colonnes gardées n'ont pas glissé sous leurs valeurs.
+  const cv01 = toutes.find((x) => x['ID fichier'] === 'cv01');
+  assert.strictEqual(cv01.Candidat, 'Alice Martin');
+  assert.strictEqual(cv01['Fichier CV'], 'cv01.pdf');
+  assert.strictEqual(g.journal.colonnesSupprimees, 2);
   const prompt = evaluationsEnvoyees(g)[0].textes[0];
   assert.ok(prompt.includes('Évalue chaque critère de la grille séparément'), 'le nouveau prompt par défaut doit remplacer le prompt figé');
   assert.ok(!prompt.includes('aucune interprétation'));
@@ -818,7 +846,8 @@ test('Panneau : le script client s\'exécute sur les données réelles du serveu
   analyserTout(env);
   const { el, appels, appeler } = panneau(env);
   assert.ok(appels.includes('getSidebarInitialData'));
-  assert.strictEqual(el('appFooter').textContent.includes('v1.0.0'), true, el('appFooter').textContent);
+  const version = fs.readFileSync(path.join(RACINE, 'VERSION'), 'utf8').trim();
+  assert.ok(el('appFooter').textContent.includes(`v${version}`), el('appFooter').textContent);
   assert.ok(el('gridSummary').textContent.startsWith('4 critères dont 1 indispensable'), el('gridSummary').textContent);
   assert.strictEqual(el('placesContactInput').value, 3);
   assert.strictEqual(el('systemPromptInput').value, '', 'le prompt par défaut n\'est plus recopié dans le champ');
@@ -844,6 +873,65 @@ test('Panneau : le script client s\'exécute sur les données réelles du serveu
   assert.ok(el('toastMessage').textContent.includes('à contacter'), el('toastMessage').textContent);
   appeler('updateJobDisplay', { status: 'COMPLETED', total: 3, processed: 3, topContactCount: 2, recentCandidates: [{ name: 'X', score: '', reco: 'Erreur' }] });
   assert.strictEqual(el('statTopContactLabel').textContent, 'À contacter (max 3)');
+
+  // « Programmé » dit depuis quand ; au-delà de 3 minutes, ce qui peut l'expliquer et où regarder.
+  appeler('updateJobDisplay', { status: 'SCHEDULED', total: 0, processed: 0, currentFileName: 'Démarrage programmé', lastUpdated: Date.now() - 45000 });
+  assert.strictEqual(el('headerStatusPill').textContent, 'Programmé');
+  assert.ok(/\(depuis 4[5-6] s\)$/.test(el('progressStepLabel').textContent), el('progressStepLabel').textContent);
+  appeler('updateJobDisplay', { status: 'SCHEDULED', total: 0, processed: 0, currentFileName: 'Démarrage programmé', lastUpdated: Date.now() - 250000 });
+  assert.strictEqual(el('headerStatusPill').textContent, 'Attente');
+  assert.ok(el('progressStepLabel').textContent.includes('Exécutions'), el('progressStepLabel').textContent);
+});
+
+/* =============================== Démarrage par déclencheur =============================== */
+
+const etatTravail = (g) => JSON.parse(g.proprietes.script.getProperty('CV_ANALYZER_JOB_STATE'));
+
+test('Défaut v1.0.0 : déclencheur arrivé pendant une autre opération → nouvel essai dit, puis démarrage', () => {
+  const env = installer({ dossier: DOSSIER().slice(0, 3) });
+  const { f, g } = env;
+  assert.ok(f('startAnalysisFromSidebar')(null).ok);
+  assert.strictEqual(etatTravail(g).status, 'SCHEDULED');
+  g.verrou.tenuAilleurs = true; // un recalcul, des brouillons, une proposition de grille…
+  f('_resumeAnalysisTrigger')();
+  const enAttente = etatTravail(g);
+  assert.strictEqual(enAttente.status, 'SCHEDULED');
+  assert.ok(enAttente.currentFileName.includes('nouvel essai dans 1 minute'), enAttente.currentFileName);
+  assert.ok(enAttente.waitingSince > 0);
+  assert.ok(g.declencheurs.some((d) => d.getHandlerFunction() === '_resumeAnalysisTrigger' && d.d.ms === 60000), 'nouvel essai programmé');
+  g.verrou.tenuAilleurs = false;
+  g.avancer(60000);
+  f('_resumeAnalysisTrigger')();
+  const fin = etatTravail(g);
+  assert.strictEqual(fin.status, 'COMPLETED');
+  assert.strictEqual(fin.waitingSince, 0);
+  assert.strictEqual(lignes(g).length, 3);
+});
+
+test('Verrou occupé plus de 15 minutes : l\'analyse renonce et le dit, sans déclencheur orphelin', () => {
+  const env = installer({ dossier: DOSSIER().slice(0, 3) });
+  const { f, g } = env;
+  f('startAnalysisFromSidebar')(null);
+  g.verrou.tenuAilleurs = true;
+  f('_resumeAnalysisTrigger')();
+  g.avancer(16 * 60 * 1000);
+  f('_resumeAnalysisTrigger')();
+  const etat = etatTravail(g);
+  assert.strictEqual(etat.status, 'ERROR');
+  assert.ok(etat.errorMessage.includes('plus de 15 minutes'), etat.errorMessage);
+  assert.ok(!g.declencheurs.some((d) => d.getHandlerFunction() === '_resumeAnalysisTrigger'));
+});
+
+test('Défaut v1.0.0 : chien de garde impossible à poser → erreur dite, verrou rendu, pas de « Programmé » éternel', () => {
+  const env = installer({ dossier: DOSSIER().slice(0, 3) });
+  const { f, g } = env;
+  f('startAnalysisFromSidebar')(null);
+  g.pannes.creationDeclencheur = 1;
+  assert.throws(() => f('_resumeAnalysisTrigger')(), /ScriptApp/);
+  const etat = etatTravail(g);
+  assert.strictEqual(etat.status, 'ERROR');
+  assert.ok(etat.errorMessage.includes('ScriptApp'), etat.errorMessage);
+  assert.strictEqual(g.verrou.tenu, false, 'le verrou est rendu');
 });
 
 /* =============================== RGPD =============================== */
@@ -869,6 +957,19 @@ test('RGPD : CV expirés à la corbeille, lignes pseudonymisées extraits compri
   assert.strictEqual(toutes[toutes.length - 1]['ID fichier'], 'cv02', 'les archives vont en bas');
 });
 
+test('RGPD : pas de nettoyage pendant une autre opération sur l\'onglet', () => {
+  const ancien = Date.now() - (800 * 24 * 3600 * 1000);
+  const dossier = DOSSIER().slice(0, 3).map((spec) => (spec.id === 'cv02' ? { ...spec, cree: ancien } : spec));
+  const env = installer({ dossier });
+  const { f, g } = env;
+  analyserTout(env);
+  g.verrou.tenuAilleurs = true;
+  f('purgeOldCVs')();
+  assert.ok(derniereAlerte(g).message.includes('Relancez le nettoyage RGPD'), derniereAlerte(g).message);
+  assert.ok(!g.fichiers.get('cv02').isTrashed());
+  assert.strictEqual(parId(g).cv02.Candidat, 'Bruno Petit');
+});
+
 /* =============================== Contrôles statiques =============================== */
 
 const sourcesGs = () => FICHIERS_GS.map((nom) => fs.readFileSync(path.join(RACINE, nom), 'utf8')).join('\n');
@@ -886,6 +987,8 @@ test('Contrôle : les cibles de google.script.run existent et ne finissent pas p
   // Petit analyseur : après « google.script.run », on saute les
   // .withSuccessHandler(…) — corps de fonction compris, chaînes comprises —
   // jusqu'au premier appel qui n'en est pas un : c'est la cible.
+  // Les commentaires sont sautés : une apostrophe dans « // on cesse d'interroger »
+  // passerait sinon pour le début d'une chaîne, et le contrôle se tromperait.
   const sauterParentheses = (texte, i) => {
     let profondeur = 0;
     let guillemet = null;
@@ -894,6 +997,12 @@ test('Contrôle : les cibles de google.script.run existent et ne finissent pas p
       if (guillemet) {
         if (c === '\\') i++;
         else if (c === guillemet) guillemet = null;
+      } else if (c === '/' && texte[i + 1] === '/') {
+        i = texte.indexOf('\n', i);
+        if (i === -1) break;
+      } else if (c === '/' && texte[i + 1] === '*') {
+        i = texte.indexOf('*/', i + 2) + 1;
+        if (i === 0) break;
       } else if (c === '"' || c === "'" || c === '`') {
         guillemet = c;
       } else if (c === '(') {

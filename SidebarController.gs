@@ -167,7 +167,8 @@ function startAnalysisFromSidebar(formData) {
       successCount: 0,
       errorCount: 0,
       errorMessage: '',
-      currentFileName: 'Démarrage programmé (le délai dépend des serveurs Google)...',
+      waitingSince: 0,
+      currentFileName: 'Démarrage programmé : c\'est Google qui lance l\'analyse, après un délai de quelques secondes à quelques minutes.',
       recentCandidates: [],
     });
 

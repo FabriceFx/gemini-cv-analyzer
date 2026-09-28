@@ -137,19 +137,34 @@ const detailScore_ = (criteres, evaluations, resultat) => [
 /**
  * Recommandation d'un CV pris seul, par seuils absolus.
  *
- * Un indispensable non démontré refuse quel que soit le score : c'est le sens
- * même d'« indispensable ». Démontré en partie, il plafonne au vivier.
+ * Un indispensable que le CV ne démontre pas, ou seulement en partie,
+ * interdit « À contacter » : le CV plafonne au vivier, avec « à vérifier ».
+ * Il ne fait **pas** refuser. Jusqu'à la v1.0.0 il le faisait, et le premier
+ * essai réel l'a montré : un profil solide, qui ne mentionnait pas son
+ * niveau d'anglais, était refusé. « Non démontré » veut dire « le CV n'en dit
+ * rien », pas « le candidat ne l'a pas » : refuser là-dessus traitait une
+ * présomption comme un fait. Le refus vient du seul score.
  */
 const recommandationDeBase_ = (resultat, reglages) => {
   const { score } = resultat;
-  if (resultat.indispensablesNonDemontres.length > 0) {
-    return { recommandation: RECOMMANDATIONS.REFUS, motif: `Indispensable non démontré : ${resultat.indispensablesNonDemontres.join(', ')}.` };
-  }
+  const aVerifier = [
+    resultat.indispensablesNonDemontres.length > 0
+      && `indispensable non démontré par le CV (${resultat.indispensablesNonDemontres.join(', ')})`,
+    resultat.indispensablesPartiels.length > 0
+      && `indispensable démontré en partie seulement (${resultat.indispensablesPartiels.join(', ')})`,
+  ].filter(Boolean).join(' ; ');
+
   if (score < reglages.seuilVivier) {
-    return { recommandation: RECOMMANDATIONS.REFUS, motif: `Score ${score} < seuil de vivier ${reglages.seuilVivier}.` };
+    return {
+      recommandation: RECOMMANDATIONS.REFUS,
+      motif: `Score ${score} < seuil de vivier ${reglages.seuilVivier}.${aVerifier ? ` En outre, ${aVerifier}.` : ''}`,
+    };
   }
-  if (resultat.indispensablesPartiels.length > 0) {
-    return { recommandation: RECOMMANDATIONS.VIVIER, motif: `Indispensable démontré en partie seulement : ${resultat.indispensablesPartiels.join(', ')}.` };
+  if (aVerifier) {
+    return {
+      recommandation: RECOMMANDATIONS.VIVIER,
+      motif: `${aVerifier.charAt(0).toUpperCase()}${aVerifier.slice(1)} : à vérifier avant tout contact (score ${score}).`,
+    };
   }
   if (score < reglages.seuilContact) {
     return { recommandation: RECOMMANDATIONS.VIVIER, motif: `Score ${score} < seuil de contact ${reglages.seuilContact}.` };
