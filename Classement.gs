@@ -292,7 +292,7 @@ const marquerDoublons_ = (fiches, sorties, indices) => {
       Object.assign(sorties[i], {
         recommandation: RECOMMANDATIONS.DOUBLON,
         doublon: `${raison.charAt(0).toUpperCase()}${raison.slice(1)} que la fiche retenue : ${designation_(fiches[principal])}.`,
-        motif: `Même personne que ${designation_(fiches[principal])} (${raison}). Seule la fiche la mieux notée est classée.`,
+        motif: `Même personne que ${designation_(fiches[principal])}, ${raison} : seule la fiche la mieux notée est classée.`,
       });
     });
   });

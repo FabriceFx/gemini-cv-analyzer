@@ -21,7 +21,7 @@
  */
 function showSidebar() {
   const htmlOutput = HtmlService.createHtmlOutputFromFile('Sidebar')
-    .setTitle('🚀 Analyseur de CV AI')
+    .setTitle('🚀 Analyseur de CV')
     .setWidth(300);
   SpreadsheetApp.getUi().showSidebar(htmlOutput);
 }

@@ -8,7 +8,7 @@
  */
 
 /** Numéro de la version courante. Le banc vérifie qu'il vaut le fichier VERSION. */
-const ANALYSEUR_CV_VERSION = '1.0.1';
+const ANALYSEUR_CV_VERSION = '1.0.3';
 
 const RESULTS_SHEET_NAME = "Résultats de l'analyse";
 const GRILLE_SHEET_NAME = "Grille d'évaluation";

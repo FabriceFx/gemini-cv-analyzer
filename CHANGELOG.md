@@ -4,6 +4,15 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
 Ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/). Les
 versions antérieures à la 1.0.0 n'étaient pas numérotées.
 
+## [1.0.3] - 2026-09-28
+
+### Corrigé
+
+- La version 1.0.2 s'affichait « 1.0.1 » dans « À propos » et en pied du panneau : la constante du code n'avait pas suivi le fichier `VERSION`.
+- Le nom de l'outil s'écrivait trois fois dans le panneau : barre de titre de Google, en-tête et pied de page. Il ne reste que la barre de titre (« 🚀 Analyseur de CV », sans le « AI » anglais) ; l'en-tête n'affiche plus que l'état de l'analyse, le pied de page la version.
+- Sur l'onglet Suivi, la fin d'analyse était dite deux fois (bandeau et libellé de progression) : le bandeau ne s'affiche plus que sur les autres onglets.
+- Sur la fiche d'un doublon, le motif et la section « Doublon » disaient la même chose ; la section ne se montre plus que pour ce qu'elle seule apprend. Le motif perd sa double parenthèse.
+
 ## [1.0.2] - 2026-09-28
 
 Corrections issues du premier essai en production.

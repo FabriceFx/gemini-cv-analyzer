@@ -936,7 +936,7 @@ test('Panneau : le script client s\'exécute sur les données réelles du serveu
   const { el, appels, appeler, ecoulerMinuteries, confirmations, reponseConfirmation } = panneau(env);
   assert.ok(appels.includes('getSidebarInitialData'));
   const version = fs.readFileSync(path.join(RACINE, 'VERSION'), 'utf8').trim();
-  assert.ok(el('appFooter').textContent.includes(`v${version}`), el('appFooter').textContent);
+  assert.ok(el('appFooter').textContent.startsWith(`Version ${version}`), el('appFooter').textContent);
   assert.ok(el('gridSummary').textContent.startsWith('4 critères dont 1 indispensable'), el('gridSummary').textContent);
   assert.strictEqual(el('placesContactInput').value, 3);
   assert.strictEqual(el('systemPromptInput').value, '', 'le prompt par défaut n\'est plus recopié dans le champ');
@@ -946,7 +946,11 @@ test('Panneau : le script client s\'exécute sur les données réelles du serveu
   appeler('loadCandidateDetails', 'cv07');
   assert.strictEqual(el('cardBadgeReco').textContent, 'Doublon');
   assert.strictEqual(el('cardBadgeReco').className, 'badge duplicate');
-  assert.strictEqual(el('cardDoublonSection').style.display, 'block');
+  // Ligne « Doublon » : le motif le dit, la section ne le répète pas.
+  assert.ok(el('cardMotif').textContent.startsWith('Même personne que Alice Martin (cv01.pdf), même email'), el('cardMotif').textContent);
+  assert.strictEqual(el('cardDoublonSection').style.display, 'none');
+  appeler('loadCandidateDetails', 'cv01');
+  assert.strictEqual(el('cardDoublonSection').style.display, 'block', 'la fiche retenue montre ses autres CV');
   assert.ok(el('cardDetail').textContent.includes('Calcul'));
 
   appeler('loadCandidateDetails', 'cv05');
@@ -977,6 +981,14 @@ test('Panneau : le script client s\'exécute sur les données réelles du serveu
   appeler('updateJobDisplay', { status: 'COMPLETED', total: 3, processed: 3, topContactCount: 2, recentCandidates: [{ name: 'X', score: '', reco: 'Erreur' }] });
   assert.strictEqual(el('statTopContactLabel').textContent, 'À contacter (max 3)');
 
+  // Onglet Suivi : la fin d'analyse n'est dite qu'une fois, par le libellé de progression.
+  ecoulerMinuteries();
+  appeler('switchTab', 'tabProgress');
+  appeler('pollProgress');
+  assert.strictEqual(el('toastMessage').className, 'toast', 'pas de bandeau qui répète le libellé');
+  assert.strictEqual(el('progressStepLabel').textContent, 'Analyse terminée avec succès');
+  appeler('switchTab', 'tabConfig');
+
   // « Programmé » dit depuis quand ; au-delà de 3 minutes, ce qui peut l'expliquer et où regarder.
   appeler('updateJobDisplay', { status: 'SCHEDULED', total: 0, processed: 0, currentFileName: 'Démarrage programmé', lastUpdated: Date.now() - 45000 });
   assert.strictEqual(el('headerStatusPill').textContent, 'Programmé');
@@ -984,6 +996,18 @@ test('Panneau : le script client s\'exécute sur les données réelles du serveu
   appeler('updateJobDisplay', { status: 'SCHEDULED', total: 0, processed: 0, currentFileName: 'Démarrage programmé', lastUpdated: Date.now() - 250000 });
   assert.strictEqual(el('headerStatusPill').textContent, 'Attente');
   assert.ok(el('progressStepLabel').textContent.includes('Exécutions'), el('progressStepLabel').textContent);
+});
+
+test('Panneau : le nom de l\'outil n\'est écrit qu\'une fois, dans la barre de titre de Google', () => {
+  const html = fs.readFileSync(path.join(RACINE, 'Sidebar.html'), 'utf8');
+  const sansCode = html.replace(/<script[\s\S]*?<\/script>/g, '').replace(/<style[\s\S]*?<\/style>/g, '').replace(/<!--[\s\S]*?-->/g, '');
+  const texte = sansCode.replace(/<[^>]+>/g, ' ');
+  const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n');
+  assert.ok(texte.includes('État de l\'analyse'), 'le contrôle ne lit plus le texte du panneau');
+  assert.ok(!/Analyseur de CV/.test(texte), 'nom de l\'outil répété dans le corps du panneau');
+  assert.ok(!/`Analyseur de CV/.test(script), 'nom de l\'outil répété par le script du panneau');
+  const controleur = fs.readFileSync(path.join(RACINE, 'SidebarController.gs'), 'utf8');
+  assert.ok(/setTitle\('🚀 Analyseur de CV'\)/.test(controleur), 'titre de la barre de Google');
 });
 
 /* =============================== Démarrage par déclencheur =============================== */
